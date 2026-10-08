@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Brain settings</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="options">
+  <div class="brand"><span class="dot"></span>brain</div>
+  <p class="muted">Connect this browser to your brain. Pages count once you've read them for a while or copied something from them; tabs in a tab group named "Claude" or "agent" are logged as your browser agent's work.</p>
+  <label>Brain URL<input id="url" placeholder="http://localhost:4321"></label>
+  <label>Access token<input id="token" type="password" placeholder="brn_…" autocomplete="off"></label>
+  <label>Minimum reading time (seconds)<input id="minDwell" type="number" min="0" max="600"></label>
+  <label>What to capture
+    <select id="mode"><option value="full">Title, URL and readable text (best summaries)</option><option value="titles">Title and URL only</option></select>
+  </label>
+  <label>Never capture these sites (one per line, * wildcards)<textarea id="blocklist" rows="9"></textarea></label>
+  <div class="row"><button id="save" class="primary">Save</button><button id="test">Test connection</button></div>
+  <p id="msg" class="muted"></p>
+  <p class="muted small">Incognito windows are never captured. Your token is stored only in this browser profile.</p>
+  <script src="options.js"></script>
+</body>
+</html>

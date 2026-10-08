@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="popup">
+  <header>
+    <div class="brand"><span class="dot"></span>brain</div>
+    <span id="status" class="muted">…</span>
+  </header>
+  <div class="stats"><div><b id="pages">–</b><span>pages today</span></div><div><b id="mem">–</b><span>memories today</span></div><div><b id="queued">–</b><span>waiting</span></div></div>
+
+  <section>
+    <label class="muted">Save this page</label>
+    <textarea id="note" rows="2" placeholder="Why it matters (optional)"></textarea>
+    <div class="row">
+      <select id="kind"><option>bookmark</option><option>note</option><option>todo</option><option>decision</option><option>lesson</option></select>
+      <button id="save" class="primary">Save</button>
+    </div>
+  </section>
+
+  <section>
+    <input id="q" placeholder="Search your brain…">
+    <div id="results"></div>
+  </section>
+
+  <footer>
+    <label class="toggle"><input type="checkbox" id="paused"> Pause capture</label>
+    <span><a id="open" href="#">Open brain</a> · <a id="opts" href="#">Settings</a></span>
+  </footer>
+  <script src="popup.js"></script>
+</body>
+</html>
