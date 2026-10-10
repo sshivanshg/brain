@@ -9,6 +9,7 @@ import { openDb, ROOT } from './db.js';
 import { createStore } from './store.js';
 import { mountMcp } from './mcp.js';
 import { mountPush } from './push.js';
+import { createOAuth } from './oauth.js';
 import * as cortex from './cortex.js';
 import { dayOf, shiftDay, clip } from './util.js';
 
@@ -35,7 +36,11 @@ function sameToken(value) {
   const want = Buffer.from(TOKEN);
   return given.length === want.length && crypto.timingSafeEqual(given, want);
 }
-const authorized = (c) => sameToken((c.req.header('authorization') || '').replace(/^Bearer\s+/i, ''));
+const oauth = createOAuth(TOKEN);
+oauth.mount(app);
+const bearer = (c) => (c.req.header('authorization') || '').replace(/^Bearer\s+/i, '');
+// The master token works everywhere; OAuth access tokens (chat-app connectors) only on /mcp.
+const authorized = (c) => sameToken(bearer(c)) || (c.req.path === '/mcp' && oauth.isAccessToken(bearer(c)));
 
 // Connector URL with the token in the path, for MCP clients that can't send headers
 // (e.g. custom connectors in chat apps). Off unless BRAIN_CONNECTOR_URL=1.
@@ -53,7 +58,13 @@ app.use('/mcp', cors({ origin: '*', allowHeaders: ['Authorization', 'Content-Typ
 app.use('*', async (c, next) => {
   const p = c.req.path;
   const open = c.req.method === 'OPTIONS' || p === '/api/health' || !(p.startsWith('/api/') || p === '/mcp');
-  if (!open && !authorized(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!open && !authorized(c)) {
+    if (p === '/mcp') {
+      const o = `${c.req.header('x-forwarded-proto') || 'https'}://${c.req.header('x-forwarded-host') || c.req.header('host')}`;
+      c.header('WWW-Authenticate', `Bearer resource_metadata="${o}/.well-known/oauth-protected-resource"`);
+    }
+    return c.json({ error: 'unauthorized' }, 401);
+  }
   await next();
 });
 
