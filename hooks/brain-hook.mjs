@@ -90,6 +90,19 @@ async function main() {
     return;
   }
 
+  // You correcting an agent is the most valuable lesson there is: save it immediately.
+  if (mode === 'prompt') {
+    const text = String(input.prompt || '').trim();
+    if (text.length < 8 || text.length > 1500 || text.startsWith('/')) return;
+    const correction = /^(no|nope|nah|wrong|stop|wait)\b|\b(don'?t|do not|never|stop doing|not like that|that'?s (wrong|not)|i (said|told you|asked)|why did you|you (broke|forgot|missed|ignored)|instead of|revert|undo that)\b/i;
+    if (!correction.test(text)) return;
+    await fetch(`${url}/api/memories`, {
+      method: 'POST', headers, signal: AbortSignal.timeout(4000),
+      body: JSON.stringify({ kind: 'lesson', project, title: `Correction: ${text.replace(/\s+/g, ' ').slice(0, 90)}`, content: text, tags: ['correction', 'auto'], source: 'claude-code', meta: { session_id: input.session_id } }),
+    });
+    return;
+  }
+
   if (mode === 'end' && input.transcript_path && fs.existsSync(input.transcript_path)) {
     const s = condense(input.transcript_path, project);
     if (!s) return;

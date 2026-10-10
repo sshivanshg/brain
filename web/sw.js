@@ -1,5 +1,5 @@
 // App shell cache so the PWA opens instantly (and offline). API calls always go to the network.
-const CACHE = 'brain-shell-v1';
+const CACHE = 'brain-shell-v2';
 const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
@@ -19,4 +19,14 @@ self.addEventListener('fetch', (e) => {
       .then((res) => { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res; })
       .catch(() => caches.match(e.request).then((r) => r || caches.match('/index.html'))),
   );
+});
+
+self.addEventListener('push', (e) => {
+  const d = (() => { try { return e.data.json(); } catch { return { title: 'Brain', body: e.data?.text() || '' }; } })();
+  e.waitUntil(self.registration.showNotification(d.title || 'Brain', { body: d.body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', data: { url: d.url || '/' } }));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: 'window' }).then((cs) => (cs[0] ? cs[0].focus() : self.clients.openWindow(e.notification.data?.url || '/'))));
 });

@@ -177,7 +177,7 @@ export function createStore(db) {
   async function brief({ project, max = 9000 } = {}) {
     const sec = [];
     const profile = (await q(`SELECT body FROM memories WHERE kind = 'profile' AND status = 'active' ORDER BY updated_at DESC LIMIT 1`))[0];
-    if (profile) sec.push(`## About me\n${clip(profile.body, 2500)}`);
+    if (profile) sec.push(`## About me\n${clip(profile.body, 1200)}`);
     const prefs = await q(`SELECT title, body FROM memories WHERE kind = 'preference' AND status = 'active'
                            AND (project IS NULL OR project = $1) ORDER BY pinned DESC, created_at DESC LIMIT 25`, [project || null]);
     if (prefs.length) sec.push(`## How I like to work\n${prefs.map((r) => `- ${line(r, 300)}`).join('\n')}`);

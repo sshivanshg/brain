@@ -336,13 +336,26 @@ async function viewSettings() {
     <h2>Capture from your phone</h2>
     <div class="card snippet"><p class="sub" style="margin:0">Add this page to your home screen (Share → Add to Home Screen). For an iOS Shortcut, POST JSON <code>{"text": "…"}</code> to:</p><pre>${esc(origin)}/api/capture   (header Authorization: Bearer YOUR_TOKEN)</pre></div>
     <h2>Your data</h2>
-    <div class="actions"><button class="btn" id="exp">Export everything (JSON)</button><button class="btn" id="theme">Toggle theme</button><button class="btn ghost" id="out">Sign out on this device</button></div>`;
+    <div class="actions"><button class="btn" id="exp">Export everything (JSON)</button><button class="btn" id="push">Enable morning brief</button><button class="btn" id="theme">Toggle theme</button><button class="btn ghost" id="out">Sign out on this device</button></div>`;
   $('#exp', v).onclick = async () => {
     const data = await api('/api/export');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     a.download = `brain-export-${today()}.json`;
     a.click();
+  };
+  $('#push', v).onclick = async () => {
+    try {
+      const { key } = await api('/api/push/key');
+      if (!key) return toast('Push is not configured on the server');
+      if ((await Notification.requestPermission()) !== 'granted') return toast('Notifications blocked');
+      const reg = await navigator.serviceWorker.ready;
+      const raw = atob(key.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (key.length % 4)) % 4));
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, (ch) => ch.charCodeAt(0)) });
+      await api('/api/push/subscribe', { method: 'POST', body: sub.toJSON() });
+      await api('/api/push/test', { method: 'POST' });
+      toast('Morning brief on — test sent');
+    } catch (err) { toast(`Couldn’t enable: ${err.message}`); }
   };
   $('#theme', v).onclick = () => {
     const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');

@@ -8,6 +8,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { openDb, ROOT } from './db.js';
 import { createStore } from './store.js';
 import { mountMcp } from './mcp.js';
+import { mountPush } from './push.js';
 import * as cortex from './cortex.js';
 import { dayOf, shiftDay, clip } from './util.js';
 
@@ -169,6 +170,7 @@ app.get('/share', (c) => {
 });
 
 mountMcp(app, store);
+mountPush(app, store);
 
 app.use('/*', serveStatic({ root: path.relative(process.cwd(), path.join(ROOT, 'web')) || '.' }));
 app.get('*', serveStatic({ path: path.relative(process.cwd(), path.join(ROOT, 'web', 'index.html')) }));

@@ -34,6 +34,7 @@ CREATE INDEX IF NOT EXISTS memories_tsv      ON memories USING gin (tsv);
 CREATE INDEX IF NOT EXISTS memories_kind     ON memories (kind, created_at DESC);
 CREATE INDEX IF NOT EXISTS memories_project  ON memories (project, created_at DESC);
 CREATE INDEX IF NOT EXISTS memories_day      ON memories (day);
+CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, sub JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 `;
 
 export async function openDb() {

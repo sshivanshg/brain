@@ -14,6 +14,7 @@ const DEFAULTS = {
   ],
 };
 
+const CHAT_HOSTS = ['chatgpt.com', 'chat.openai.com', 'claude.ai', 'gemini.google.com'];
 const settings = async () => ({ ...DEFAULTS, ...(await chrome.storage.local.get(Object.keys(DEFAULTS))) });
 const today = () => new Date().toLocaleDateString('en-CA');
 
@@ -39,6 +40,7 @@ async function handleVisit(page, tab) {
   if (s.paused || tab?.incognito || !/^https?:/.test(page.url || '')) return;
   if (s.url && page.url.startsWith(s.url)) return;
   if (blocked(page.url, s.blocklist)) return;
+  if (CHAT_HOSTS.includes(new URL(page.url).hostname)) return; // saved as conversations by chat.js instead
   const agent = await isAgentTab(tab);
   if (page.seen && !agent) return; // ordinary tabs must earn their place with real reading time
   await serial(async () => {
@@ -101,6 +103,22 @@ async function remember(body) {
   return res.json();
 }
 
+async function brainFetch(p, opts = {}) {
+  const s = await settings();
+  if (!s.token) throw new Error('Set your brain URL and token in the extension options.');
+  const res = await fetch(`${s.url}${p}`, { ...opts, headers: { Authorization: `Bearer ${s.token}`, 'Content-Type': 'application/json', 'X-Brain-Source': 'chrome' } });
+  if (!res.ok) throw new Error(`Brain said ${res.status}`);
+  return res.headers.get('content-type')?.includes('json') ? res.json() : res.text();
+}
+
+// What to paste into a web chat: memories matching what you've typed, or your general briefing.
+async function chatContext(query) {
+  if (!query) return (await brainFetch('/api/brief')).replace(/^# .*\n/, '').replace(/\n_Save decisions[\s\S]*$/, '').slice(0, 3000);
+  const { sources } = await brainFetch('/api/ask', { method: 'POST', body: JSON.stringify({ question: query }) });
+  if (!sources.length) return '(nothing relevant in the brain)';
+  return sources.slice(0, 6).map((m) => `- [${m.kind}${m.project ? ` · ${m.project}` : ''} · ${m.day}] ${m.title}: ${String(m.summary || m.body || '').replace(/[⟦⟧]/g, '').replace(/\s+/g, ' ').slice(0, 300)}`).join('\n');
+}
+
 async function pageOf(tab) {
   try { return await chrome.tabs.sendMessage(tab.id, { type: 'extract' }); } catch { return { url: tab.url, title: tab.title, text: '' }; }
 }
@@ -151,6 +169,8 @@ chrome.commands.onCommand.addListener(async (cmd) => {
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.type === 'visit') { handleVisit(msg.page, sender.tab).finally(() => reply({ ok: true })); return true; }
   if (msg.type === 'save') { chrome.tabs.get(msg.tabId).then((tab) => savePage(tab, msg.note, msg.kind)).then((m) => reply({ ok: true, id: m.id }), (e) => reply({ ok: false, error: e.message })); return true; }
+  if (msg.type === 'chat-context') { chatContext(msg.query).then((context) => reply({ ok: true, context }), (e) => reply({ ok: false, error: e.message })); return true; }
+  if (msg.type === 'chat-save') { brainFetch('/api/sessions', { method: 'POST', body: JSON.stringify({ session_id: msg.session_id, agent: msg.agent, title: msg.title, transcript: msg.transcript, first_prompt: msg.title }) }).then(() => reply({ ok: true }), () => reply({ ok: false })); return true; }
   if (msg.type === 'flush') { flush().then(() => reply({ ok: true })); return true; }
   if (msg.type === 'badge') { refreshBadge(); }
   return false;
