@@ -38,7 +38,7 @@ log(`config + hook -> ${brainDir}`);
 const settingsFile = path.join(HOME, '.claude', 'settings.json');
 const settings = readJson(settingsFile, {});
 settings.hooks ||= {};
-const ours = (cmd) => ({ hooks: [{ type: 'command', command: `node "${hookPath}" ${cmd}`, timeout: cmd === 'start' ? 5 : 15 }] });
+const ours = (cmd) => ({ hooks: [{ type: 'command', command: `node "${hookPath}" ${cmd}`, timeout: cmd === 'start' ? 10 : 15 }] });
 for (const [event, cmd] of [['SessionStart', 'start'], ['SessionEnd', 'end'], ['PreCompact', 'end']]) {
   const kept = (settings.hooks[event] || []).filter((g) => !JSON.stringify(g).includes('brain-hook.mjs'));
   settings.hooks[event] = [...kept, ours(cmd)];

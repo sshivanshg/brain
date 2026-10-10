@@ -185,9 +185,12 @@ async function dreamAll() {
   return { done };
 }
 
-if (cortex.cortexEnabled) setInterval(() => dreamAll().catch((e) => console.error('[dream]', e.message)), 60 * 60 * 1000).unref();
+const onVercel = Boolean(process.env.VERCEL);
+if (cortex.cortexEnabled && !onVercel) setInterval(() => dreamAll().catch((e) => console.error('[dream]', e.message)), 60 * 60 * 1000).unref();
 
-serve({ fetch: app.fetch, port: PORT }, () => {
+export { app };
+
+if (!onVercel) serve({ fetch: app.fetch, port: PORT }, () => {
   console.log(`brain listening on http://localhost:${PORT}  (db: ${db.kind}, cortex: ${cortex.cortexEnabled ? 'on' : 'off'})`);
   if (!process.env.BRAIN_TOKEN) console.log(`token: data/token.txt`);
 });

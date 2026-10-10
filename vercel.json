@@ -1,0 +1,11 @@
+{
+  "buildCommand": "",
+  "outputDirectory": "web",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api" },
+    { "source": "/mcp", "destination": "/api" },
+    { "source": "/share", "destination": "/api" },
+    { "source": "/connector/:path*", "destination": "/api" }
+  ],
+  "functions": { "api/index.js": { "maxDuration": 60 } }
+}

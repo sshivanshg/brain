@@ -83,7 +83,7 @@ async function main() {
   const project = projectOf(input.cwd);
 
   if (mode === 'start') {
-    const res = await fetch(`${url}/api/brief?project=${encodeURIComponent(project)}`, { headers, signal: AbortSignal.timeout(2500) });
+    const res = await fetch(`${url}/api/brief?project=${encodeURIComponent(project)}`, { headers, signal: AbortSignal.timeout(8000) });
     if (!res.ok) return;
     const brief = await res.text();
     process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: brief } }));
