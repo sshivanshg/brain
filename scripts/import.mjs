@@ -2,6 +2,7 @@
 // Pull everything you already have into the brain. Idempotent (every item has a stable ext_key).
 //   npm run import                       -> agent-hub + ~/.claude/history.jsonl
 //   npm run import -- --hub ~/Documents/projects/agent-hub --no-history
+//   npm run import -- --obsidian ~/Documents/SecondBrain
 //   npm run import -- --from-export brain-export-2026-10-08.json   (move local data to a hosted brain)
 import fs from 'node:fs';
 import os from 'node:os';
@@ -83,7 +84,43 @@ function fromHistory(file) {
   }
 }
 
-if (flag('from-export')) {
+
+// Obsidian vault (PARA layout aware). Folders map to kinds; frontmatter tags/created are kept.
+function fromObsidian(vault) {
+  const files = walk(vault).filter((f) => f.endsWith('.md') && !/\/(\.obsidian|\.trash|\.git|Templates|node_modules)\//.test(f));
+  for (const f of files) {
+    const rel = path.relative(vault, f);
+    const parts = rel.split(path.sep);
+    const top = parts[0];
+    const name = path.basename(f, '.md');
+    const raw = fs.readFileSync(f, 'utf8');
+    const { fm, body } = frontmatter(raw);
+    if (!body.trim()) continue;
+    let kind = 'note';
+    let project = null;
+    if (/^\d{4}-\d{2}-\d{2}/.test(name) || top === 'Daily') kind = 'note';
+    if (top === 'Weekly') kind = 'digest';
+    if (/Projects/.test(top)) { kind = 'doc'; project = parts.length > 2 ? parts[1] : name; }
+    if (/Areas/.test(top)) kind = 'fact';
+    if (/Resources/.test(top)) kind = 'doc';
+    if (/profile/i.test(name)) kind = 'profile';
+    if (/decision/i.test(name)) kind = 'decision';
+    if (/^(tasks|todo)/i.test(name)) kind = 'todo';
+    const dateName = name.match(/^(\d{4}-\d{2}-\d{2})/);
+    const created = String(fm.created || '').match(/\d{4}-\d{2}-\d{2}/);
+    const day = dateName?.[1] || created?.[0] || dayOf(fs.statSync(f).mtimeMs);
+    const tags = String(fm.tags || '').replace(/[[\]]/g, '').split(/[,\s]+/).filter(Boolean);
+    items.push({
+      kind, project, day, title: name, body: body.replace(/!\[\[([^\]]+)\]\]/g, '[embed: $1]'),
+      tags: [...tags, 'obsidian', /Archive/.test(top) ? 'archive' : null].filter(Boolean),
+      pinned: kind === 'profile', source: 'obsidian', ext_key: `obsidian:${rel}`, meta: { path: rel, folder: top },
+    });
+  }
+}
+
+if (flag('obsidian')) {
+  fromObsidian(expand(flag('obsidian')));
+} else if (flag('from-export')) {
   for (const m of JSON.parse(fs.readFileSync(expand(flag('from-export')), 'utf8'))) {
     const { id, created_at, updated_at, ...rest } = m;
     items.push({ ...rest, ext_key: m.ext_key || `export:${id}` });
