@@ -1,7 +1,8 @@
 name: quality
-# Runs on PRs only to save Actions minutes; run `npm run check` locally before pushing.
+# Manual only: Actions minutes are exhausted, so `npm run check` locally is the gate.
+# Re-enable `pull_request:` when minutes are available.
 on:
-  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
