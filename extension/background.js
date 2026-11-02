@@ -130,13 +130,13 @@ async function savePage(tab, note = '', kind = 'bookmark') {
 }
 
 function flash(text) {
-  chrome.action.setBadgeBackgroundColor({ color: '#6d4dff' });
+  chrome.action.setBadgeBackgroundColor({ color: '#6d4dff' }); // design-ok: no CSS vars here
   chrome.action.setBadgeText({ text });
   setTimeout(() => refreshBadge(), 2500);
 }
 async function refreshBadge() {
   const { paused } = await settings();
-  chrome.action.setBadgeBackgroundColor({ color: '#6b6678' });
+  chrome.action.setBadgeBackgroundColor({ color: '#6b6678' }); // design-ok: no CSS vars here
   chrome.action.setBadgeText({ text: paused ? 'off' : '' });
 }
 

@@ -1,0 +1,18 @@
+#!/bin/sh
+# main is production (Vercel deploys it) and moves only through pull requests.
+# Emergency override (say why in the PR/issue): BRAIN_ALLOW_PROTECTED_PUSH=1 git push ...
+
+[ "${BRAIN_ALLOW_PROTECTED_PUSH:-}" = "1" ] && exit 0
+
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main)
+      echo "pre-push: direct pushes to 'main' are blocked." >&2
+      echo "  Push a feat/<slug> or fix/<slug> branch and open a PR (gh pr create --base main)." >&2
+      status=1
+      ;;
+  esac
+done
+
+exit $status

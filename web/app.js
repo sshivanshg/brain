@@ -370,7 +370,7 @@ function renderLogin(error) {
   app.innerHTML = `<div class="login"><form class="card" id="lf">
     <div class="brand" style="padding:0 0 14px"><span class="brand-dot"></span>brain</div>
     <p class="sub">Paste your access token (from <code>data/token.txt</code> or your host’s <code>BRAIN_TOKEN</code>).</p>
-    ${error ? `<p style="color:#ef4444">${esc(error)}</p>` : ''}
+    ${error ? `<p style="color:var(--danger)">${esc(error)}</p>` : ''}
     <input class="field" name="t" type="password" placeholder="brn_…" autocomplete="current-password">
     <div class="row"><button class="btn primary">Open my brain</button></div></form></div>`;
   $('#lf').onsubmit = (e) => { e.preventDefault(); store.set(TOKEN_KEY, e.target.t.value.trim()); route(); };

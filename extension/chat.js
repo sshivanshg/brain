@@ -20,7 +20,7 @@
   btn.title = 'Add context from your brain (Alt+B)';
   Object.assign(btn.style, {
     position: 'fixed', right: '18px', bottom: '96px', zIndex: 2147483647, width: '40px', height: '40px', borderRadius: '12px',
-    border: '1px solid rgba(157,134,255,.5)', background: '#15141b', color: '#fff', fontSize: '18px', cursor: 'pointer',
+    border: '1px solid rgba(157,134,255,.5)', background: '#15141b', color: '#fff', fontSize: '18px', cursor: 'pointer', // design-ok: no CSS vars here
     boxShadow: '0 6px 20px rgba(109,77,255,.35)',
   });
   document.documentElement.append(btn);
