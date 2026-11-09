@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
+    "dev": "node --env-file-if-exists=.env.local --watch server/index.js",
     "test": "node --test test/*.test.js",
     "import": "node scripts/import.mjs",
     "connect": "node scripts/connect.mjs",
@@ -18,15 +18,23 @@
     "setup": "npm ci --no-audit --no-fund && npm run hooks",
     "hooks": "git config core.hooksPath .githooks",
     "check": "node scripts/quality.mjs check",
-    "check:design": "node scripts/quality.mjs design"
+    "check:design": "node scripts/quality.mjs design",
+    "build": "node scripts/quality.mjs check",
+    "start:neon": "node --env-file=.env.local server/index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
+    "@aws-sdk/client-s3": "^3.1164.0",
     "@electric-sql/pglite": "^0.5.8",
     "@hono/node-server": "^2.1.4",
+    "@neon/config": "^1.13.0",
+    "@neon/env": "^2.1.0",
+    "@neon/realtime": "^0.2.1",
     "hono": "^4.13.13",
+    "jose": "^6.2.16",
     "pg": "^8.23.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "ws": "^8.22.2"
   },
   "bin": {
     "brain": "bin/brain.mjs"

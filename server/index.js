@@ -10,6 +10,8 @@ import { createStore } from './store.js';
 import { mountMcp } from './mcp.js';
 import { mountPush } from './push.js';
 import { createOAuth } from './oauth.js';
+import { mountNeon, isOwnerJwt } from './neon.js';
+import { fileURLToPath } from 'node:url';
 import * as cortex from './cortex.js';
 import { dayOf, shiftDay, clip } from './util.js';
 
@@ -58,7 +60,7 @@ app.use('/mcp', cors({ origin: '*', allowHeaders: ['Authorization', 'Content-Typ
 app.use('*', async (c, next) => {
   const p = c.req.path;
   const open = c.req.method === 'OPTIONS' || p === '/api/health' || !(p.startsWith('/api/') || p === '/mcp');
-  if (!open && !authorized(c)) {
+  if (!open && !authorized(c) && !(await isOwnerJwt(bearer(c)))) {
     if (p === '/mcp') {
       const o = `${c.req.header('x-forwarded-proto') || 'https'}://${c.req.header('x-forwarded-host') || c.req.header('host')}`;
       c.header('WWW-Authenticate', `Bearer resource_metadata="${o}/.well-known/oauth-protected-resource"`);
@@ -182,6 +184,7 @@ app.get('/share', (c) => {
 
 mountMcp(app, store);
 mountPush(app, store);
+mountNeon(app, store);
 
 app.use('/*', serveStatic({ root: path.relative(process.cwd(), path.join(ROOT, 'web')) || '.' }));
 app.get('*', serveStatic({ path: path.relative(process.cwd(), path.join(ROOT, 'web', 'index.html')) }));
@@ -199,11 +202,13 @@ async function dreamAll() {
 }
 
 const onVercel = Boolean(process.env.VERCEL);
-if (cortex.cortexEnabled && !onVercel) setInterval(() => dreamAll().catch((e) => console.error('[dream]', e.message)), 60 * 60 * 1000).unref();
+if (cortex.cortexEnabled && !onVercel && process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) setInterval(() => dreamAll().catch((e) => console.error('[dream]', e.message)), 60 * 60 * 1000).unref();
 
 export { app };
 
-if (!onVercel) serve({ fetch: app.fetch, port: PORT }, () => {
+// Listen only when run directly (npm start / service); Vercel and Neon Functions import `app`.
+const runDirectly = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (runDirectly) serve({ fetch: app.fetch, port: PORT }, () => {
   console.log(`brain listening on http://localhost:${PORT}  (db: ${db.kind}, cortex: ${cortex.cortexEnabled ? 'on' : 'off'})`);
   if (!process.env.BRAIN_TOKEN) console.log(`token: data/token.txt`);
 });
