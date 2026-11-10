@@ -1,7 +1,6 @@
 {
   "name": "brain",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Personal second brain: one memory for every agent, browser and device.",
   "engines": {
@@ -40,5 +39,10 @@
   },
   "bin": {
     "brain": "bin/brain.mjs"
+  },
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sshivanshg/brain"
   }
 }

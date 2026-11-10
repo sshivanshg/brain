@@ -1,78 +1,141 @@
+<div align="center">
+
+<img src="docs/screenshots/landing.png" alt="Brain landing page: a constellation shaped like a brain" width="880">
+
 # brain
 
-A private second brain that every agent, browser tab and device writes into — and reads from.
+**The brain that sits between you and your AI.**
 
-- **One memory for every agent.** A built-in MCP server (`/mcp`) gives Claude Code, Cursor, Codex, Windsurf, Claude Desktop — anything that speaks MCP — the same tools: `brief`, `remember`, `recall`, `timeline`, `dream`…
-- **Agents write without being asked.** Claude Code hooks inject a project briefing at session start and ship every session (prompts, files changed, outcome) to the brain when it ends or compacts. A global instruction tells agents to save decisions, lessons and preferences the moment they happen.
-- **Your browsing, compacted.** The Chrome extension records pages you actually read (focused time, not open tabs), what you copy, and everything your browser agent opens. Each night the day is consolidated into a digest and the raw pages are trimmed.
-- **Phone-first web app.** Installable PWA: Today, Search, Ask, Projects, Browsing, Library, voice Capture, share-sheet target.
-- **Yours.** Single-user token, secrets redacted before anything is stored, one-click JSON export, runs on any Postgres.
+One memory that every agent — Claude Code, Cursor, ChatGPT, Claude.ai, your browser — reads from and writes to.
+Self-hosted. Yours. Switch models; what you know stays.
+
+[Quick start](#quick-start) · [Connect your agents](#connect-your-agents) · [Skills](#skills) · [Self-host](#self-host) · [Contributing](CONTRIBUTING.md)
+
+![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-black) ![Node 24](https://img.shields.io/badge/node-24-black) ![MCP](https://img.shields.io/badge/MCP-ready-black)
+
+</div>
+
+---
+
+## Why
+
+Every AI tool keeps its own little memory, locked inside its own product. Switch from one assistant to
+another and you start from zero. Brain flips that: **your knowledge lives in one place you own**, and
+every agent plugs into it over [MCP](https://modelcontextprotocol.io).
+
+- **Agents brief themselves.** At the start of a session an agent gets who you are, how you like to
+  work, the lessons it must not repeat, decisions already made and open threads for that project.
+- **Agents write back without being asked.** Decisions, lessons, preferences and todos are saved the
+  moment they happen; whole sessions are summarized when they end.
+- **Skills travel with you.** Keep your `SKILL.md` playbooks in Brain, per project or global, and any
+  agent can list and load them.
+- **Your reading, compacted.** The Chrome extension keeps pages you actually read and folds each day
+  into a digest.
+- **Search that understands you.** Full-text search everywhere, plus semantic (vector) search with
+  pgvector when an embeddings endpoint is configured.
+- **Private by default.** Single owner token, secrets redacted before storage, one-click JSON export,
+  runs on any Postgres.
+
+## Screenshots
+
+| Search your mind | Skills | Phone |
+|---|---|---|
+| <img src="docs/screenshots/home.png" alt="Search-first home" width="420"> | <img src="docs/screenshots/skills.png" alt="Skills library" width="420"> | <img src="docs/screenshots/phone.png" alt="Phone layout" width="200"> |
+
+## How it works
 
 ```
- Claude Code ──hooks──┐        ┌── Web app / PWA (phone, desktop)
- Cursor, Codex… ─MCP──┤        ├── Chrome extension
- iOS Shortcut ──REST──┼─ brain ┤
-                      │ server │── Postgres (tsvector search)
-                      └────────┘── optional cortex (Claude API): summaries, digests, answers
+ Claude Code ──hooks + MCP──┐          ┌── Web app / PWA (phone, desktop)
+ Cursor, Codex, Windsurf ─MCP┤          ├── Chrome extension
+ ChatGPT / Claude.ai ──OAuth─┼─ brain ──┤
+ iOS Shortcut, CLI ───REST───┘  server  ├── Postgres  (full-text + pgvector)
+                                        └── optional: embeddings, object-storage backups
 ```
 
-## Run it locally
+A small Hono server exposes a REST API, an MCP endpoint (`/mcp`) and the web app. Everything is a
+**memory** (`kind`: session, decision, lesson, preference, todo, fact, skill, browse, digest…) in one
+Postgres table.
+
+## Quick start
 
 ```bash
-npm install
-npm start                # http://localhost:4321, embedded Postgres (PGlite) in ./data
-cat data/token.txt       # your access token
+git clone https://github.com/sshivanshg/brain && cd brain
+npm run setup          # installs deps, enables git hooks
+npm start              # http://localhost:4321 with embedded Postgres (PGlite) in ./data
+cat data/token.txt     # your access token — paste it into the web app
 ```
 
-Keep it running in the background on macOS (starts at login):
+Requires Node 24 (see `.nvmrc`). No database needed locally.
+
+## Connect your agents
 
 ```bash
-npm run service
+npm run connect -- --url http://localhost:4321 --token <token>
 ```
 
-## Wire up your agents
+This registers the `brain` MCP server for Claude Code and Cursor, adds Claude Code hooks
+(SessionStart / SessionEnd / PreCompact / UserPromptSubmit) and a short protocol block in
+`~/.claude/CLAUDE.md`. Every file it touches is backed up first, and re-running is safe.
+
+**Any other MCP client** (Codex, Windsurf, Claude Desktop…): add an HTTP MCP server at
+`<your-brain>/mcp` with header `Authorization: Bearer <token>`.
+
+**ChatGPT / Claude.ai:** add a custom connector pointing at `<your-brain>/mcp`; Brain speaks OAuth 2.1
+(PKCE + dynamic client registration) and asks for your token once.
+
+MCP tools: `brief`, `remember`, `recall`, `get`, `update`, `forget`, `timeline`, `projects`,
+`update_profile`, `dream`, `save_digest`, `skills`, `skill`, `save_skill`.
+
+## Skills
+
+Store the playbooks you build with — your own or imported — and every agent can use them.
 
 ```bash
-npm run connect                                   # local
-npm run connect -- --url https://brain.you.dev --token brn_…   # after hosting
+brain skill add ./SKILL.md -p my-app            # one file, for one project
+brain skill add ./.claude/skills                # a whole folder, global
+brain skill add https://github.com/org/repo/tree/main/skills/tdd   # import from GitHub
+brain skills -p my-app                          # list
+brain skills pull -p my-app                     # write them into ./.claude/skills/<name>/SKILL.md
 ```
 
-This writes `~/.brain/config.json`, adds `SessionStart` / `SessionEnd` / `PreCompact` hooks to `~/.claude/settings.json`, registers the `brain` MCP server for Claude Code (user scope) and Cursor, and adds a short "Brain protocol" block to `~/.claude/CLAUDE.md`. Every file it touches is backed up as `*.bak-brain` first. Re-running is safe.
+Agents see the skill list in their briefing, load one with the `skill` tool and save new ones with
+`save_skill`. You can also add, import and read skills in the web app under **Skills**.
 
-In Claude Code you also get two commands from the MCP server: `/mcp__brain__dream` (consolidate past days into digests, lessons and profile updates) and `/mcp__brain__catch-me-up`.
-
-## Import what you already have
+## CLI
 
 ```bash
-npm run import          # agent-hub (skills, agents, prompts, playbooks, Claude memories) + every prompt in ~/.claude/history.jsonl
+brain                  # briefing for this project + today so far
+brain find <query>     # search everything
+brain add "…" -k decision -p my-app
+brain today | yesterday
+brain handoff "…"      # note for the next agent session here
 ```
 
-Moving from local to hosted: Settings → Export in the web app, then `npm run import -- --from-export brain-export.json --url https://… --token …`.
+Link it with `npm link` or `ln -s "$PWD/bin/brain.mjs" ~/.local/bin/brain`.
 
 ## Chrome extension
 
-1. `chrome://extensions` → Developer mode → **Load unpacked** → the `extension/` folder.
-2. In its settings, enter the brain URL and token → **Test connection**.
+`chrome://extensions` → Developer mode → **Load unpacked** → `extension/`, then enter your brain URL
+and token. Pages count after 20s of focused reading; banking, email and password managers are blocked
+by default; incognito is never captured.
 
-- Pages count after 20s of focused reading (configurable) or when you copy text from them.
-- Tabs inside a tab group named "Claude"/"agent" are always logged and tagged `chrome-agent`.
-- Email, banking, payments and password managers are blocked by default; incognito is never captured; "Pause capture" in the popup.
-- Right-click → Save page / selection / link, or `Alt+Shift+B`.
+## Self-host
 
-## Phone
+Brain is a plain Node server plus Postgres, so it runs anywhere.
 
-Open the brain URL on your phone → Share → **Add to Home Screen**. Capture supports dictation. On Android the app appears in the share sheet. For an iOS Shortcut: `POST /api/capture` with `{"text": "…"}` and `Authorization: Bearer <token>`.
+| Variable | |
+|---|---|
+| `DATABASE_URL` | Any Postgres (Neon, Supabase, RDS, local). Schema is created on boot; pgvector is enabled if available. |
+| `BRAIN_TOKEN` | Required in production. `openssl rand -base64 32` |
+| `BRAIN_TZ` | IANA timezone for "today" (default: server timezone) |
+| `NEON_AI_GATEWAY_BASE_URL` / `_TOKEN` | Optional OpenAI-compatible embeddings for semantic search |
+| `AWS_*`, `BRAIN_BUCKET` | Optional S3-compatible storage for daily JSON backups |
+| `ANTHROPIC_API_KEY` | Optional: server-side summaries, digests and answers |
 
-## Host it
+**Neon (one URL for API, MCP and app):** `neon.ts` describes Postgres, Auth, object storage,
+Functions and the AI Gateway. `npm run deploy` bundles the web app and deploys it as a Neon Function.
 
-It's a plain Node server + Postgres, so any host works (Railway, Render, Fly, a VPS…):
-
-- `DATABASE_URL` — any Postgres (Neon, Supabase, Railway…). Schema is created on boot.
-- `BRAIN_TOKEN` — required in production (`node -e "console.log('brn_'+require('crypto').randomBytes(24).toString('base64url'))"`).
-- `BRAIN_TZ`, `BRAIN_OWNER`, optional `ANTHROPIC_API_KEY` — see `.env.example`.
-- `Dockerfile` included; otherwise `npm start` on Node ≥ 20.
-
-Then re-run `npm run connect -- --url … --token …` on each machine and update the extension settings.
+**Anything else:** `npm start` on Node 24 behind HTTPS, or the included `Dockerfile`.
 
 ## API
 
@@ -80,22 +143,25 @@ All routes need `Authorization: Bearer <token>`.
 
 | Route | |
 |---|---|
-| `GET /api/memories?q=&kind=&project=&day=&since=` | search (websearch syntax: quotes, `or`, `-not`) or list |
-| `POST /api/memories` | `{kind, content, title?, project?, tags?, url?, pinned?}` |
-| `GET/PATCH/DELETE /api/memories/:id` | read, edit, archive |
-| `POST /api/capture` | quick note / link from anywhere |
-| `POST /api/capture/browse` | page visits (extension) |
-| `POST /api/sessions` | agent session transcript (hooks) |
+| `GET /api/memories?q=&kind=&project=&day=` | search or list |
+| `POST /api/memories` | `{kind, content, title?, project?, tags?, url?}` |
+| `GET / PATCH / DELETE /api/memories/:id` | read, edit, archive |
+| `GET /api/skills?project=` · `GET /api/skills/:name` · `POST /api/skills` | skills |
+| `POST /api/capture` | quick note or link |
 | `GET /api/brief?project=` | the briefing agents get |
-| `POST /api/ask` | `{question}` → answer with sources |
-| `GET /api/stats`, `/api/projects`, `/api/digest?day=`, `/api/export` | |
+| `GET /api/export` | everything as JSON |
 | `POST /mcp` | MCP (Streamable HTTP) |
-
-Kinds: `note session decision lesson preference profile todo fact browse highlight bookmark voice digest prompt prompt-log skill agent playbook doc memory`.
 
 ## Develop
 
 ```bash
-npm run dev     # restart on change
-npm test        # store + scrubber tests against a throwaway PGlite
+npm run dev       # restart on change
+npm run check     # syntax, design-token lint, manifests, tests
 ```
+
+Read [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md) first. UI follows
+[docs/DESIGN.md](docs/DESIGN.md).
+
+## License
+
+[AGPL-3.0](LICENSE). If you run a modified Brain as a service for others, share your changes.

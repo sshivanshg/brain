@@ -262,6 +262,8 @@ export function createStore(db) {
                               AND kind NOT IN ('lesson', 'decision', 'todo', 'preference') LIMIT 10`, [project]);
       if (pinned.length) sec.push(`## Pinned for ${project}\n${pinned.map((r) => `- ${r.kind}: ${r.title} (#${r.id})`).join('\n')}`);
     }
+    const skills = await listSkills(project);
+    if (skills.length) sec.push(`## Skills you can load (call \`skill\` with the name)\n${skills.slice(0, 25).map((r) => `- ${r.name}: ${clip(r.description || '', 140)}`).join('\n')}`);
     const digest = (await q(`SELECT day::text AS day, body FROM memories WHERE kind = 'digest' AND status <> 'archived' ORDER BY day DESC LIMIT 1`))[0];
     if (digest) sec.push(`## Latest daily digest (${digest.day})\n${clip(digest.body, 1500)}`);
     const head = `# Brain briefing${project ? ` — ${project}` : ''}\n`;
@@ -296,9 +298,30 @@ export function createStore(db) {
               GROUP BY day ORDER BY day`, [dayOf()]);
   }
 
+  // Skills: project skills first, then global ones; a project skill shadows a global one with the same name.
+  async function listSkills(project) {
+    const rows = await q(
+      `SELECT id, title AS name, summary AS description, project, url, updated_at, length(body) AS size FROM memories
+       WHERE kind = 'skill' AND status = 'active' AND (project IS NULL OR project = $1)
+       ORDER BY (project IS NULL), title LIMIT 200`,
+      [project || null],
+    );
+    const seen = new Set();
+    return rows.filter((r) => !seen.has(r.name) && seen.add(r.name));
+  }
+
+  async function getSkill(name, project) {
+    return (await q(
+      `SELECT id, title AS name, summary AS description, project, url, body FROM memories
+       WHERE kind = 'skill' AND status = 'active' AND title = $1 AND (project IS NULL OR project = $2)
+       ORDER BY (project IS NULL) LIMIT 1`,
+      [name, project || null],
+    ))[0] || null;
+  }
+
   async function exportAll() {
     return q(`SELECT ${COLS} FROM memories ORDER BY id`);
   }
 
-  return { backfillEmbeddings, semanticOn: () => Boolean(db.vector), remember, recordVisit, search, get, update, forget, projects, stats, brief, pendingForDay, saveDigest, daysNeedingDigest, exportAll, query: q };
+  return { listSkills, getSkill, backfillEmbeddings, semanticOn: () => Boolean(db.vector), remember, recordVisit, search, get, update, forget, projects, stats, brief, pendingForDay, saveDigest, daysNeedingDigest, exportAll, query: q };
 }

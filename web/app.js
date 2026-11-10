@@ -1,5 +1,6 @@
 // Brain web app — no build step, no framework. Hash routes, one render() per view.
-import { parseRoute, resolveRoute, searchPath, mcpUrl, kindGlyph, kindVar, specimenMeta } from './lib.js';
+import { parseRoute, resolveRoute, searchPath, skillsPath, skillPath, skillTitle, pullCommand, mcpUrl, kindGlyph, kindVar, specimenMeta, demoSearch } from './lib.js';
+import { mountBrain } from './brain.js';
 import { playIntro } from './intro.js';
 import { mountField } from './field.js';
 
@@ -120,13 +121,14 @@ const ICON = {
   ask: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/>',
   projects: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   browsing: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  skills: '<path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/>',
   library: '<path d="M4 4h5v16H4zM10 4h5v16h-5zM16 5l4 1-3 14-4-1z"/>',
   capture: '<path d="M12 5v14M5 12h14"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
 };
 const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
-const NAV = [['today', 'Home', '#/'], ['ask', 'Ask', '#/ask'], ['projects', 'Projects', '#/projects'], ['browsing', 'Browsing', '#/browsing'], ['library', 'Library', '#/library'], ['capture', 'Capture', '#/capture'], ['settings', 'Settings', '#/settings']];
+const NAV = [['today', 'Home', '#/'], ['ask', 'Ask', '#/ask'], ['projects', 'Projects', '#/projects'], ['browsing', 'Browsing', '#/browsing'], ['library', 'Library', '#/library'], ['skills', 'Skills', '#/skills'], ['capture', 'Capture', '#/capture'], ['settings', 'Settings', '#/settings']];
 const TABS = ['today', 'ask', 'projects', 'browsing', 'settings'];
 
 let healthP = null;
@@ -269,42 +271,116 @@ async function loadFeed(el) {
 }
 
 // ---------- landing ----------
-const DIAGRAM = `<svg class="l-diagram" viewBox="0 0 600 180" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
-  <g class="d-lines"><path d="M60 90 H270"/><path d="M330 90 H540"/><path d="M60 90 C120 20 200 20 270 70"/><path d="M330 110 C400 160 480 160 540 90"/><path d="M300 30 V150"/></g>
-  <g class="d-nodes"><circle cx="60" cy="90" r="7"/><circle cx="300" cy="90" r="12"/><circle cx="540" cy="90" r="7"/></g>
-  <g class="d-labels"><text x="60" y="128">CAPTURE</text><text x="300" y="132">REMEMBER</text><text x="540" y="128">RECALL</text></g>
-</svg>`;
+const DEMO = [
+  { kind: 'decision', project: 'brain', when: '2d', title: 'Use Neon branches for every PR', body: 'Preview deploys get their own database branch so migrations never touch production data.' },
+  { kind: 'lesson', project: 'brain', when: '5d', title: 'Scrub tokens before writing memories', body: 'An API key leaked into a session summary once. The server now redacts secrets on write.' },
+  { kind: 'preference', project: '', when: '3w', title: 'Short commit messages, no trailers', body: 'Imperative mood, one line, no co-author lines. Applies to every repo.' },
+  { kind: 'fact', project: 'shop', when: '1w', title: 'Checkout runs on Stripe test mode locally', body: 'Use the 4242 card. Webhooks are forwarded with the Stripe CLI on port 4000.' },
+  { kind: 'browse', project: '', when: '4d', title: 'Why CRDTs are not a free lunch', body: 'Article on merge semantics and tombstones; relevant to offline capture.' },
+  { kind: 'todo', project: 'brain', when: 'today', title: 'Dedupe near-identical lessons', body: 'Merge lessons with the same meaning so briefings stay short.' },
+];
+const DEMO_QUERIES = ['neon', 'commit', 'stripe', 'tokens'];
+const CLIENTS = ['Claude Code', 'Cursor', 'ChatGPT', 'Claude.ai', 'Chrome'];
+const FAQ = [
+  ['Is it self-hosted?', 'Yes. Brain runs on your own Vercel and Postgres (Neon) account, or on your laptop with an embedded database. There is no shared server and no account with us.'],
+  ['What about privacy?', 'Every request needs your token. Secrets are redacted before anything is stored, and you can export or delete any memory at any time. Nothing is used to train models.'],
+  ['Which AIs does it work with?', 'Anything that speaks MCP: Claude Code, Cursor, Claude.ai and ChatGPT connectors. The Chrome extension captures what you read, and there is a plain HTTP API for everything else.'],
+  ['Do I have to change how I work?', 'No. Agents read a short briefing when a session starts and write back what they learned when it ends. You only open Brain when you want to look something up.'],
+];
+const hit = (text, q) => {
+  const t = esc(text);
+  if (!q) return t;
+  const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/&/g, '&amp;')})`, 'ig');
+  return t.replace(re, '<mark>$1</mark>');
+};
+let heroStop = null;
 function viewLanding(signedIn) {
   const mcp = mcpUrl(location.origin);
-  const cta = signedIn ? '<a class="btn primary lg" href="#/">Back to your brain</a>' : '<a class="btn primary lg" href="#/login">Open your brain</a>';
-  const sec = (n, label, body, note = '') => `<section class="l-sec"><p class="l-label"><span class="l-n">${n}</span>${label}</p><div class="l-body">${body}</div>${note ? `<aside class="l-note">${note}</aside>` : ''}</section>`;
+  const primary = signedIn ? '<a class="btn primary lg" href="#/">Back to your brain</a>' : '<a class="btn primary lg" href="#/login">Open your brain</a>';
   app.innerHTML = `<div class="landing">
-    <header class="l-top"><a class="brand" href="#/"><span class="brand-dot"></span>brain</a><span class="l-coord" aria-hidden="true">N° 001 · ARCHIVE OF A MIND</span>${signedIn ? '<a class="btn ghost" href="#/">Your brain</a>' : '<a class="btn ghost" href="#/login">Sign in</a>'}</header>
+    <header class="l-top"><a class="brand" href="#/about"><span class="brand-dot"></span>brain</a>
+      <nav class="l-nav" aria-label="Sections"><a href="#how">How it works</a><a href="#connect">Connect</a><a href="#faq">FAQ</a></nav>
+      ${signedIn ? '<a class="btn ghost" href="#/">Your brain</a>' : '<a class="btn ghost" href="#/login">Sign in</a>'}</header>
     <section class="l-hero">
-      <p class="fig"><span>FIG. 00 — SPECIMEN</span><span>ONE MEMORY · EVERY AGENT</span></p>
-      <h1 class="display">The brain <em>between</em> you and your AI.</h1>
-      <div class="l-hero-foot">
-        <p class="lede">Claude Code, Cursor, ChatGPT and your browser read and write one memory. Yours. Switch models; what you know stays.</p>
-        ${cta}
+      <div class="l-hero-copy">
+        <p class="eyebrow">One memory for every AI you use</p>
+        <h1 class="display">The brain between you and your <em>AI</em>.</h1>
+        <p class="lede">Claude Code, Cursor, ChatGPT and your browser all read and write one memory that you own. Switch models; what you know stays.</p>
+        <div class="l-ctas">${primary}<a class="btn ghost lg" href="#how" data-jump>How it works</a></div>
+      </div>
+      <div class="l-brain"><canvas id="brain" aria-label="A brain-shaped constellation of memories. Pulses travel between connected nodes; tap a node to fire it." role="img"></canvas></div>
+    </section>
+    <section class="l-strip" aria-label="Works with"><p>Works with the tools you already use</p><ul>${CLIENTS.map((c) => `<li>${c}</li>`).join('')}</ul></section>
+    <section class="l-sec" id="how">
+      <p class="eyebrow">How it works</p>
+      <h2 class="l-h">Three steps, then it runs itself.</h2>
+      <ol class="l-steps">
+        <li><span class="l-n">1</span><h3>Connect your AIs</h3><p>Add one MCP URL to Claude Code, Cursor or a Claude.ai connector. Install the Chrome extension if you want reading captured too.</p></li>
+        <li><span class="l-n">2</span><h3>Work as usual</h3><p>Agents write back decisions, lessons and preferences as they happen. Brain keeps each one short, deduped and searchable by meaning.</p></li>
+        <li><span class="l-n">3</span><h3>Every session starts informed</h3><p>A new chat in any tool begins with a briefing of what matters for that project, so you stop repeating yourself.</p></li>
+      </ol>
+    </section>
+    <section class="l-sec l-demo-sec">
+      <div class="l-demo-copy"><p class="eyebrow">Search</p><h2 class="l-h">Ask it what you decided.</h2><p class="l-body">Every memory is searchable by keyword and by meaning, from the app or from any agent. Try it on this sample.</p></div>
+      <div class="l-demo" role="search">
+        <label class="l-demo-box"><span class="sr">Search sample memories</span>${icon('search')}<input id="demo-q" type="search" autocomplete="off" spellcheck="false" placeholder="Search your brain"></label>
+        <div id="demo-out" class="l-demo-out" aria-live="polite"></div>
       </div>
     </section>
-    ${sec('01', 'The problem', '<h2 class="l-h">Your memory is scattered across vendors.</h2><p>Every assistant keeps its own notes and forgets them on the next tab. Decisions live in one chat, lessons in another, the article that changed your mind in a third.</p>', 'Three tools, three memories, none of them yours.')}
-    ${sec('02', 'The brain', '<h2 class="l-h">One archive. Every agent reads it first.</h2><p>Each session starts with a short briefing of what matters, and ends by writing back what it learned. You own the database.</p>', 'MCP · HTTP · Chrome')}
-    ${sec('03', 'The loop', `<h2 class="l-h">Capture → Remember → Recall.</h2>${DIAGRAM}<ol class="l-legend"><li><b>Capture.</b> Sessions, decisions, pages you read, a thought you type.</li><li><b>Remember.</b> Kept short, deduped, searchable by meaning.</li><li><b>Recall.</b> Briefings on start; search when an agent needs more.</li></ol>`)}
-    ${sec('04', 'Connect', `<h2 class="l-h">One endpoint for every client.</h2>
-      <div class="copyrow"><code id="mcpurl">${esc(mcp)}</code><button class="btn" id="copymcp" aria-label="Copy MCP URL">Copy</button></div>
+    <section class="l-sec" id="connect">
+      <p class="eyebrow">Connect</p>
+      <h2 class="l-h">One URL for every client.</h2>
+      <p class="l-body">Paste this into any MCP-capable tool. Your token stays with you; nothing is readable without it.</p>
+      <div class="copyrow"><code id="mcpurl">${esc(mcp)}</code><button class="btn" id="copymcp">Copy URL</button></div>
       <dl class="l-clients">
-        <dt>Claude Code</dt><dd><code>claude mcp add --transport http brain ${esc(mcp)}</code></dd>
-        <dt>Cursor</dt><dd>Settings → MCP → add server URL</dd>
-        <dt>claude.ai</dt><dd>Settings → Connectors → add custom connector</dd>
-        <dt>Chrome</dt><dd>The brain extension captures what you read</dd>
-      </dl>`, 'Bring your token. Nothing leaves without it.')}
-    <footer class="l-foot"><p class="l-label"><span class="l-n">05</span>Ownership</p><p class="display-sm">Self-hosted. <em>Yours.</em></p>${cta}</footer>
+        <div><dt>Claude Code</dt><dd><code>claude mcp add --transport http brain ${esc(mcp)}</code></dd></div>
+        <div><dt>Cursor</dt><dd>Settings, then MCP, then add the server URL.</dd></div>
+        <div><dt>Claude.ai and ChatGPT</dt><dd>Settings, then Connectors, then add a custom connector.</dd></div>
+        <div><dt>Chrome</dt><dd>The Brain extension saves pages you read and highlights you make.</dd></div>
+      </dl>
+    </section>
+    <section class="l-sec" id="faq">
+      <p class="eyebrow">Questions</p>
+      <h2 class="l-h">Before you connect it.</h2>
+      <div class="l-faq">${FAQ.map(([q, a], i) => `<details${i === 0 ? ' open' : ''}><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>
+    </section>
+    <footer class="l-final">
+      <h2 class="display-sm">Stop re-explaining yourself to <em>every</em> AI.</h2>
+      <p class="lede">Self-hosted, private, and yours. Set up in about ten minutes.</p>
+      <div class="l-ctas">${primary}</div>
+    </footer>
   </div>`;
   $('#copymcp').onclick = async () => {
     try { await navigator.clipboard.writeText(mcp); toast('MCP URL copied'); } catch { toast('Select the URL and copy it'); }
   };
-  setField({ intensity: 1 });
+  app.querySelectorAll('a[href^="#"]:not([href^="#/"])').forEach((a) => {
+    a.onclick = (e) => { e.preventDefault(); $(a.getAttribute('href'))?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); };
+  });
+  const q = $('#demo-q'), out = $('#demo-out');
+  const render = () => {
+    const s = q.value.trim();
+    const rows = demoSearch(DEMO, s).slice(0, 3);
+    out.innerHTML = rows.length
+      ? rows.map((m) => `<article class="mem"><div class="mem-top">${kindTag(m.kind)}${m.project ? `<span>${esc(m.project)}</span>` : ''}<span>${m.when}</span></div><div class="mem-title">${hit(m.title, s)}</div><div class="mem-body">${hit(m.body, s)}</div></article>`).join('')
+      : `<div class="empty"><p>Nothing about “${esc(s)}” in this sample. Try ${DEMO_QUERIES.map((x) => `<button class="linkish" data-q="${x}">${x}</button>`).join(', ')}.</p></div>`;
+    out.querySelectorAll('[data-q]').forEach((b) => { b.onclick = () => { q.value = b.dataset.q; render(); }; });
+  };
+  let typer = 0, touched = false;
+  q.oninput = () => { touched = true; clearTimeout(typer); render(); };
+  render();
+  // Type a sample query once the demo scrolls into view, unless the visitor got there first.
+  const word = DEMO_QUERIES[0];
+  const io = new IntersectionObserver(([e]) => {
+    if (!e.isIntersecting) return;
+    io.disconnect();
+    if (touched) return;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { q.value = word; render(); return; }
+    let i = 0;
+    const tick = () => { if (touched) return; q.value = word.slice(0, ++i); render(); if (i < word.length) typer = setTimeout(tick, 140); };
+    typer = setTimeout(tick, 400);
+  }, { threshold: 0.6 });
+  io.observe(q);
+  heroStop = mountBrain($('#brain'));
   window.scrollTo(0, 0);
 }
 
@@ -341,6 +417,7 @@ async function viewProjects() {
   const v = loading('projects');
   const rows = await api('/api/projects');
   v.innerHTML = `<h1>Projects</h1><p class="sub">Everything your agents have learned, per project.</p>
+    <div class="actions"><a class="btn sm" href="#/skills">${icon('skills')}Skills your agents load</a></div>
     ${rows.length ? `<div class="grid">${rows.map((p) => `<a class="proj" href="#/project/${encodeURIComponent(p.project)}"><h3>${esc(p.project)}</h3><p>${p.count} memories · ${p.sessions} sessions · ${p.knowledge} decisions/lessons</p><p>active ${ago(p.last_active)} ago</p></a>`).join('')}</div>` : '<div class="empty">No projects yet.</div>'}`;
 }
 
@@ -369,10 +446,165 @@ async function viewLibrary() {
   const kind = params().get('kind') || 'skill';
   const v = loading('library');
   const rows = await api(`/api/memories?kind=${kind}&limit=200`);
-  v.innerHTML = `<h1>Library</h1><p class="sub">Your skills, agents, prompts and playbooks — synced from agent-hub.</p>
+  v.innerHTML = `<h1>Library</h1><p class="sub">Your skills, agents, prompts and playbooks — synced from agent-hub. Manage skills your agents load in <a class="inline" href="#/skills">Skills</a>.</p>
     <div class="chips">${LIB.map((k) => `<button data-k="${k}" class="${k === kind ? 'on' : ''}">${k}s</button>`).join('')}</div>
     ${rows.length ? `<div class="grid">${rows.map((m) => `<a class="proj" href="#/m/${m.id}"><h3 style="font-size:20px">${esc(m.title)}</h3><p>${esc((m.summary || m.body || '').replace(/[#*`>-]/g, '').slice(0, 140))}</p>${m.project ? `<p style="margin-top:8px"><span class="chip">${esc(m.project)}</span></p>` : ''}</a>`).join('')}</div>` : '<div class="empty">Run <code>npm run import</code> to pull in agent-hub.</div>'}`;
   v.querySelectorAll('.chips button').forEach((b) => { b.onclick = () => { location.hash = `#/library?kind=${b.dataset.k}`; }; });
+}
+
+// ---------- skills: SKILL.md files every agent can load via MCP ----------
+const projQ = () => params().get('project') || '';
+const skillHref = (s) => `#/skills/${encodeURIComponent(s.name)}${s.project ? `?project=${encodeURIComponent(s.project)}` : ''}`;
+const copyBtn = (text, label = 'Copy') => `<button type="button" class="btn sm" data-copy="${esc(text)}">${label}</button>`;
+function bindCopy(el) {
+  el.querySelectorAll('[data-copy]').forEach((b) => {
+    b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.copy); toast('Copied'); } catch { toast('Select the text and copy it'); } };
+  });
+}
+const skillCard = (s) => `<a class="skill" href="${skillHref(s)}">
+    <div class="mem-top">${kindTag('skill')}<span>${s.project ? esc(s.project) : 'Global'}</span>${s.updated_at ? `<span>${ago(s.updated_at)}</span>` : ''}</div>
+    <h3>${esc(s.name)}</h3>
+    <p>${esc(s.description || 'No description yet. Add one in the frontmatter.')}</p>
+    ${s.url ? `<span class="skill-src">${esc(domain(s.url))}</span>` : ''}
+  </a>`;
+const skelSkills = (n = 4) => `<div class="skills" aria-busy="true" aria-label="Loading skills">${'<div class="skill skel"><i></i><i></i><i></i></div>'.repeat(n)}</div>`;
+
+async function viewSkills() {
+  const project = projQ();
+  const v = frame('skills', `<h1>Skills</h1>
+    <p class="sub">Instructions your agents load on demand. Global skills reach every project; project skills only that one.</p>
+    <div class="skills-bar">
+      <label class="sr" for="skproj">Show skills for</label>
+      <select class="field" id="skproj"><option value="">All (global)</option></select>
+      <button class="btn primary" id="skadd" aria-expanded="false" aria-controls="skpanel">Add skill</button>
+    </div>
+    <section id="skpanel" class="card skill-add" hidden></section>
+    <section id="sklist" aria-live="polite">${skelSkills()}</section>`, { search: false });
+  const sel = $('#skproj', v), list = $('#sklist', v), panel = $('#skpanel', v), addBtn = $('#skadd', v);
+  let projects = [];
+  api('/api/projects').then((rows) => {
+    projects = rows.map((r) => r.project);
+    if (project && !projects.includes(project)) projects.unshift(project);
+    sel.innerHTML = `<option value="">All (global)</option>${projects.map((p) => `<option value="${esc(p)}"${p === project ? ' selected' : ''}>${esc(p)}</option>`).join('')}`;
+  }).catch(() => {});
+  sel.onchange = () => { location.hash = sel.value ? `#/skills?project=${encodeURIComponent(sel.value)}` : '#/skills'; };
+  const openAdd = (open = panel.hidden) => {
+    panel.hidden = !open;
+    addBtn.setAttribute('aria-expanded', open);
+    if (open) { renderAdd(panel, projects, project, load); panel.querySelector('textarea, button')?.focus(); }
+  };
+  addBtn.onclick = () => openAdd();
+  async function load() {
+    list.innerHTML = skelSkills();
+    try {
+      const rows = await api(skillsPath(project));
+      list.innerHTML = rows.length
+        ? `<h2>${project ? `For ${esc(project)}` : 'Every skill'} <span class="count">${rows.length}</span></h2><div class="skills">${rows.map(skillCard).join('')}</div>`
+        : `<div class="empty"><p>${project ? `No skills for ${esc(project)} yet. Global skills will show here too.` : 'No skills yet. Add a SKILL.md and every agent can load it.'}</p><div class="actions center"><button class="btn primary" data-open-add>Add your first skill</button></div></div>`;
+      list.querySelector('[data-open-add]')?.addEventListener('click', () => openAdd(true));
+    } catch (err) {
+      if (err.message === 'unauthorized') return;
+      list.innerHTML = failState(err);
+      bindRetry(list, load);
+    }
+  }
+  load();
+}
+
+function renderAdd(panel, projects, project, done) {
+  panel.innerHTML = `<div class="skill-tabs" role="tablist" aria-label="How to add">
+      <button role="tab" data-tab="file" aria-selected="true" class="on">Upload</button>
+      <button role="tab" data-tab="paste" aria-selected="false">Paste</button>
+      <button role="tab" data-tab="url" aria-selected="false">From URL</button>
+    </div>
+    <form id="skf">
+      <div data-pane="file">
+        <label class="drop" id="drop"><input type="file" id="skfiles" accept=".md,.markdown,text/markdown" multiple class="sr">
+          <b>Drop SKILL.md files here</b><span>or choose files. Each one becomes a skill, named from its frontmatter or first heading.</span></label>
+        <ul class="drop-list" id="droplist"></ul>
+      </div>
+      <div data-pane="paste" hidden><label class="sr" for="skmd">Skill markdown</label><textarea class="big" id="skmd" placeholder="---&#10;name: code-review&#10;description: How I want reviews done&#10;---&#10;&#10;# Code review&#10;…"></textarea></div>
+      <div data-pane="url" hidden><label class="sr" for="skurl">Skill URL</label><input class="field" id="skurl" type="url" inputmode="url" placeholder="https://github.com/owner/repo/blob/main/skills/x/SKILL.md"></div>
+      <div class="row">
+        <label class="sr" for="sktarget">Save to</label>
+        <select class="field" id="sktarget"><option value="">Global (every project)</option>${projects.map((p) => `<option value="${esc(p)}"${p === project ? ' selected' : ''}>${esc(p)}</option>`).join('')}</select>
+        <button class="btn primary" id="sksave">Save skill</button>
+      </div>
+      <p class="err" id="skerr" role="alert" hidden></p>
+    </form>`;
+  let tab = 'file', files = [];
+  const err = $('#skerr', panel), save = $('#sksave', panel);
+  const showErr = (m) => { err.textContent = m; err.hidden = !m; };
+  panel.querySelectorAll('[data-tab]').forEach((b) => {
+    b.onclick = () => {
+      tab = b.dataset.tab;
+      panel.querySelectorAll('[data-tab]').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+      panel.querySelectorAll('[data-pane]').forEach((x) => { x.hidden = x.dataset.pane !== tab; });
+      showErr('');
+    };
+  });
+  const read = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsText(f); });
+  async function take(list) {
+    const md = [...list].filter((f) => /\.(md|markdown)$/i.test(f.name) || f.type === 'text/markdown');
+    if (!md.length) return showErr('Only .md files can become skills.');
+    showErr('');
+    for (const f of md) { const content = await read(f); files.push({ file: f.name, content, title: skillTitle(content, f.name) }); }
+    $('#droplist', panel).innerHTML = files.map((f) => `<li><b>${esc(f.title || f.file)}</b><span>${esc(f.file)}</span></li>`).join('');
+  }
+  const drop = $('#drop', panel);
+  $('#skfiles', panel).onchange = (e) => take(e.target.files);
+  drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); take(e.dataTransfer.files); };
+  $('#skf', panel).onsubmit = async (e) => {
+    e.preventDefault();
+    const target = $('#sktarget', panel).value || undefined;
+    let jobs;
+    if (tab === 'file') jobs = files.map((f) => ({ content: f.content, name: skillTitle(f.content) ? undefined : f.title }));
+    else if (tab === 'paste') jobs = $('#skmd', panel).value.trim() ? [{ content: $('#skmd', panel).value }] : [];
+    else jobs = $('#skurl', panel).value.trim() ? [{ url: $('#skurl', panel).value.trim() }] : [];
+    if (!jobs.length) return showErr(tab === 'file' ? 'Choose at least one .md file.' : tab === 'paste' ? 'Paste the skill’s markdown first.' : 'Paste a link to a SKILL.md.');
+    save.disabled = true; save.textContent = 'Saving…'; showErr('');
+    const failed = [];
+    for (const j of jobs) {
+      try { await api('/api/skills', { method: 'POST', body: { ...j, project: target } }); } catch (x) { if (x.message === 'unauthorized') return; failed.push(x.message); }
+    }
+    save.disabled = false; save.textContent = 'Save skill';
+    const ok = jobs.length - failed.length;
+    if (ok) toast(ok === 1 ? 'Skill saved' : `${ok} skills saved`);
+    if (failed.length) return showErr(`Couldn’t save ${failed.length}: ${failed[0]}`);
+    panel.hidden = true;
+    done();
+  };
+}
+
+async function viewSkill(name) {
+  const project = projQ();
+  const v = frame('skills', `<div class="skel-h"></div>${skelCards(1)}`, { search: false });
+  const s = await api(skillPath(name, project));
+  const listId = (await api(skillsPath(s.project || '')).catch(() => [])).find((r) => r.name === s.name && (r.project || '') === (s.project || ''))?.id;
+  const cmd = pullCommand(s.project || '');
+  v.innerHTML = `<p class="back"><a href="#/skills${s.project ? `?project=${encodeURIComponent(s.project)}` : ''}">← Skills</a></p>
+    <div class="detail-head">${kindTag('skill')}<span>${s.project ? esc(s.project) : 'Global'}</span>${listId ? `<span>#${listId}</span>` : ''}</div>
+    <h1>${esc(s.name)}</h1>
+    ${s.description ? `<p class="sub">${esc(s.description)}</p>` : ''}
+    ${s.url ? `<p class="skill-from">Imported from <a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a></p>` : ''}
+    <div class="card skill-use">
+      <h2>Use in a project</h2>
+      <p>Agents connected to Brain load it through the MCP <code>skill</code> tool by name. To write it into a repo as a file, run:</p>
+      <div class="copyrow"><code>${esc(cmd)}</code>${copyBtn(cmd)}</div>
+    </div>
+    <div class="actions">${copyBtn(s.body, 'Copy markdown')}${listId ? '<button class="btn sm ghost danger" id="skdel">Delete skill</button>' : ''}</div>
+    <article class="card md">${md(s.body.replace(/^---\n[\s\S]*?\n---\n?/, ''))}</article>`;
+  bindCopy(v);
+  const del = $('#skdel', v);
+  if (del) {
+    del.onclick = async () => {
+      if (!confirm(`Delete “${s.name}”? Agents will stop seeing it.`)) return;
+      del.disabled = true;
+      try { await api(`/api/memories/${listId}`, { method: 'DELETE' }); toast('Skill deleted'); location.hash = `#/skills${s.project ? `?project=${encodeURIComponent(s.project)}` : ''}`; } catch (x) { del.disabled = false; toast(`Couldn’t delete: ${x.message}`); }
+    };
+  }
 }
 
 async function viewMemory(id) {
@@ -520,6 +752,7 @@ async function route() {
   const signedIn = !!store.get(TOKEN_KEY);
   const view = resolveRoute(path, signedIn);
   if (view !== 'home') setField(null);
+  heroStop?.(); heroStop = null;
   try {
     if (view === 'landing') return viewLanding(signedIn);
     if (view === 'login') return renderLogin();
@@ -529,6 +762,8 @@ async function route() {
     else if (view === 'project') await viewProject(decodeURIComponent(path.slice(9)));
     else if (view === 'browsing') await viewBrowsing();
     else if (view === 'library') await viewLibrary();
+    else if (view === 'skills') await viewSkills();
+    else if (view === 'skill') await viewSkill(decodeURIComponent(path.slice(8)));
     else if (view === 'capture') await viewCapture();
     else if (view === 'settings') await viewSettings();
     else if (view === 'memory') await viewMemory(path.slice(3));

@@ -1,0 +1,24 @@
+name: Bug report
+description: Something in Brain doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened?, description: Include what you expected instead. }
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes: { label: Steps to reproduce, placeholder: "1. …\n2. …" }
+    validations: { required: true }
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where?
+      options: [Web app / PWA, MCP / agents, Claude Code hooks, CLI, Chrome extension, Server / self-hosting, Other]
+    validations: { required: true }
+  - type: input
+    id: env
+    attributes: { label: Environment, placeholder: "Node 24, Neon / Postgres 17 / PGlite, macOS…" }
+  - type: textarea
+    id: logs
+    attributes: { label: Logs, description: Remove tokens and personal data first., render: shell }

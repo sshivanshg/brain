@@ -63,7 +63,7 @@ export function playIntro() {
   const el = document.createElement('div');
   el.className = `intro ${mode}`;
   el.setAttribute('role', 'presentation');
-  el.innerHTML = `${mode === 'full' ? '<canvas class="intro-field" aria-hidden="true"></canvas>' : ''}<div class="intro-word">brain</div><p class="intro-note">FIG. 00 — IGNITION · TAP TO SKIP</p>`;
+  el.innerHTML = `${mode === 'full' ? '<canvas class="intro-field" aria-hidden="true"></canvas>' : ''}<div class="intro-word">brain</div><p class="intro-note">Tap to skip</p>`;
   document.body.append(el);
   const stop = mode === 'full' ? ignite(el.querySelector('canvas')) : () => {};
   let done = false;

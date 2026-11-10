@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRoute, introMode, searchPath, mcpUrl, parseRoute } from '../web/lib.js';
+import { resolveRoute, introMode, searchPath, mcpUrl, parseRoute, skillsPath, skillPath, skillTitle, pullCommand } from '../web/lib.js';
 
 test('signed-out visitors land on the manifesto for any route', () => {
   assert.equal(resolveRoute('/', false), 'landing');
@@ -75,4 +75,69 @@ test('specimen metadata strip reads kind, project, date and id', async () => {
   const { specimenMeta } = await import('../web/lib.js');
   assert.deepEqual(specimenMeta({ id: 7, kind: 'lesson', project: 'brain' }, '3d'), ['lesson', 'brain', '3d', '#7']);
   assert.deepEqual(specimenMeta({ id: 8, kind: 'note' }, 'now'), ['note', 'now', '#8']);
+});
+
+test('brain silhouette contains the cerebrum and excludes the corners', async () => {
+  const { inBrain } = await import('../web/lib.js');
+  assert.equal(inBrain(0, -0.1), true);
+  assert.equal(inBrain(0.55, 0.42), true); // cerebellum
+  assert.equal(inBrain(-0.98, 0.95), false);
+  assert.equal(inBrain(0.98, -0.95), false);
+});
+
+test('brain nodes are deterministic, capped and all inside the silhouette', async () => {
+  const { brainNodes, inBrain } = await import('../web/lib.js');
+  const a = brainNodes(90, 7);
+  assert.deepEqual(a, brainNodes(90, 7));
+  assert.equal(a.length, 90);
+  assert.ok(a.every((n) => inBrain(n.x, n.y)));
+  assert.equal(brainNodes(5000, 1).length, 160);
+});
+
+test('brain links join near neighbours only, each pair once, with a per-node cap', async () => {
+  const { brainNodes, brainLinks } = await import('../web/lib.js');
+  const nodes = brainNodes(80, 3);
+  const links = brainLinks(nodes, { reach: 0.35, perNode: 3 });
+  assert.ok(links.length > 40);
+  const seen = new Set(), deg = new Map();
+  for (const [i, j] of links) {
+    assert.ok(i < j && !seen.has(`${i}-${j}`)); seen.add(`${i}-${j}`);
+    assert.ok(Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y) <= 0.35);
+    deg.set(i, (deg.get(i) || 0) + 1);
+  }
+  assert.ok([...deg.values()].every((d) => d <= 3));
+});
+
+test('landing search demo matches title or body, case-insensitively, and marks hits', async () => {
+  const { demoSearch } = await import('../web/lib.js');
+  const rows = [{ title: 'Use Neon branches', body: 'per PR' }, { title: 'Tabs', body: 'Prefer two spaces' }];
+  assert.deepEqual(demoSearch(rows, 'neon').map((r) => r.title), ['Use Neon branches']);
+  assert.deepEqual(demoSearch(rows, 'SPACES').map((r) => r.title), ['Tabs']);
+  assert.equal(demoSearch(rows, '').length, 2);
+  assert.equal(demoSearch(rows, 'zzz').length, 0);
+});
+
+test('skills routes resolve to the list and detail views', () => {
+  assert.equal(resolveRoute('/skills', true), 'skills');
+  assert.equal(resolveRoute('/skills/code-review', true), 'skill');
+  assert.equal(resolveRoute('/skills', false), 'landing');
+});
+
+test('skills api paths carry the project only when one is picked', () => {
+  assert.equal(skillsPath(''), '/api/skills');
+  assert.equal(skillsPath('my app'), '/api/skills?project=my%20app');
+  assert.equal(skillPath('code review', ''), '/api/skills/code%20review');
+  assert.equal(skillPath('x', 'brain'), '/api/skills/x?project=brain');
+});
+
+test('skill title comes from frontmatter, then heading, then file name', () => {
+  assert.equal(skillTitle('---\nname: tdd\ndescription: d\n---\n# Other'), 'tdd');
+  assert.equal(skillTitle('# Code review\nbody'), 'Code review');
+  assert.equal(skillTitle('plain text', 'notes.md'), 'notes');
+  assert.equal(skillTitle('', ''), '');
+});
+
+test('pull command names the project or falls back to a placeholder', () => {
+  assert.equal(pullCommand('brain'), 'brain skills pull -p brain');
+  assert.equal(pullCommand(''), 'brain skills pull -p <project>');
 });

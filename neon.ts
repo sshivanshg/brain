@@ -12,7 +12,7 @@ export default defineConfig({
       source: "./functions/brain.mjs",
       env: {
         BRAIN_TOKEN: { value: process.env.BRAIN_TOKEN, required: true },
-        BRAIN_TZ: process.env.BRAIN_TZ ?? "Asia/Kolkata",
+        BRAIN_TZ: process.env.BRAIN_TZ ?? "UTC",
         BRAIN_OWNER_EMAILS: { value: process.env.BRAIN_OWNER_EMAILS, required: false },
         // Realtime vars are not injected into Functions and NEON_* is reserved, so pass them under our names.
         BRAIN_REALTIME_URL: { value: process.env.BRAIN_REALTIME_URL, required: false },
