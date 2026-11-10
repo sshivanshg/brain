@@ -1,6 +1,7 @@
 // Brain web app — no build step, no framework. Hash routes, one render() per view.
-import { parseRoute, resolveRoute, searchPath, mcpUrl } from './lib.js';
+import { parseRoute, resolveRoute, searchPath, mcpUrl, kindGlyph, kindVar, specimenMeta } from './lib.js';
 import { playIntro } from './intro.js';
+import { mountField } from './field.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
@@ -25,8 +26,7 @@ async function api(path, opts = {}) {
 
 // ---------- helpers ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const KIND_VAR = { session: 'session', decision: 'decision', lesson: 'lesson', preference: 'preference', profile: 'preference', browse: 'browse', digest: 'digest', todo: 'todo', skill: 'skill', agent: 'agent', prompt: 'prompt', 'prompt-log': 'prompt', playbook: 'skill', highlight: 'highlight', bookmark: 'browse', voice: 'note' };
-const kindTag = (k) => `<span class="kind" style="--c: var(--k-${KIND_VAR[k] || 'note'})">${esc(k)}</span>`;
+const kindTag = (k) => `<span class="kind" style="--c: var(--k-${kindVar(k)})"><i aria-hidden="true">${kindGlyph(k)}</i>${esc(k)}</span>`;
 const domain = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 const today = () => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const shift = (day, n) => { const d = new Date(`${day}T12:00:00`); d.setDate(d.getDate() + n); return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); };
@@ -82,14 +82,36 @@ function md(src) {
 
 function card(m) {
   const text = m.snippet ? md(m.snippet.replace(/\n+/g, ' ')) : esc(m.summary || (m.body || '').replace(/[#*`>]/g, '').slice(0, 400));
+  const [, ...rest] = specimenMeta(m, ago(m.created_at));
   return `<a class="mem" href="#/m/${m.id}">
-    <div class="mem-top">${kindTag(m.kind)}${m.project ? `<span class="chip">${esc(m.project)}</span>` : ''}<span>${esc(m.source)}</span>${m.pinned ? '<span class="pin">● pinned</span>' : ''}${m.meta?.dwell ? `<span>${mins(m.meta.dwell)} read</span>` : ''}<time>${ago(m.created_at)}</time></div>
+    <div class="mem-top">${kindTag(m.kind)}${rest.map((x) => `<span>${esc(x)}</span>`).join('')}${m.source ? `<span>${esc(m.source)}</span>` : ''}${m.pinned ? '<span class="pin">◉ pinned</span>' : ''}${m.meta?.dwell ? `<span>${mins(m.meta.dwell)} read</span>` : ''}</div>
     <div class="mem-title">${esc(m.title)}</div>
     <div class="mem-body">${text}</div>
     ${m.url ? `<div class="mem-url">${esc(domain(m.url))}</div>` : ''}
   </a>`;
 }
 const stream = (rows, empty = 'Nothing here yet.') => (rows.length ? `<div class="stream">${rows.map(card).join('')}</div>` : `<div class="empty">${empty}</div>`);
+
+// ---------- neural field (one canvas behind every view) ----------
+let fieldStop = null;
+let fieldSeq = 0;
+function setField(opts) {
+  fieldSeq++;
+  fieldStop?.(); fieldStop = null;
+  const canvas = $('#field');
+  if (!canvas) return;
+  document.body.classList.toggle('has-field', !!opts);
+  if (opts) fieldStop = mountField(canvas, { ...opts, tip: $('#field-tip') });
+}
+// Home: start ambient and faint, then swap in real memories when they arrive.
+async function memoryField() {
+  setField({ intensity: 0.35 });
+  const mine = fieldSeq;
+  try {
+    const rows = await api('/api/memories?limit=120');
+    if (mine === fieldSeq && rows.length) setField({ memories: rows, intensity: 0.55 });
+  } catch {}
+}
 
 // ---------- icons ----------
 const ICON = {
@@ -114,12 +136,12 @@ function frame(active, content, { search = true } = {}) {
   app.innerHTML = `<div class="shell">
     <aside class="side">
       <a class="brand" href="#/"><span class="brand-dot"></span>brain</a>
-      <nav class="nav">${NAV.map(([k, label, href]) => `<a href="${href}" class="${k === active ? 'on' : ''}">${icon(k)}${label}</a>`).join('')}</nav>
+      <nav class="nav">${NAV.map(([k, label, href], i) => `<a href="${href}" class="${k === active ? 'on' : ''}"${k === active ? ' aria-current="page"' : ''}><span class="nav-n">${String(i + 1).padStart(2, '0')}</span>${label}</a>`).join('')}</nav>
       <div class="side-foot"><a href="#/about">Why brain</a><span id="health"></span></div>
     </aside>
     <main>
       ${search ? `<div class="top">
-        <form class="searchbox" id="topsearch" role="search">${icon('search')}<input name="q" aria-label="Search your brain" placeholder="Search everything you and your agents know…" autocomplete="off"><kbd>/</kbd></form>
+        <form class="searchbox" id="topsearch" role="search">${icon('search')}<input name="q" aria-label="Search your brain" placeholder="Ask your mind…" autocomplete="off"><kbd>/</kbd></form>
         <a class="btn primary" href="#/capture">+ Capture</a>
       </div>` : ''}
       <div id="view">${content}</div>
@@ -135,6 +157,7 @@ function frame(active, content, { search = true } = {}) {
 // Skeletons shaped like the content they stand in for.
 const skelCards = (n = 3) => `<div class="stream" aria-busy="true" aria-label="Loading">${'<div class="mem skel"><i></i><i></i><i></i></div>'.repeat(n)}</div>`;
 const loading = (active) => frame(active, `<div class="skel-h"></div>${skelCards(4)}`);
+const fig = (n, label, extra = '') => `<p class="fig"><span>FIG. ${String(n).padStart(2, '0')} — ${esc(label)}</span>${extra ? `<span>${extra}</span>` : ''}</p>`;
 function params() { return parseRoute(location.hash).params; }
 function failState(err, retryLabel = 'Try again') {
   return `<div class="empty fail" role="alert"><p>${esc(err.message === 'Failed to fetch' ? 'Couldn’t reach your brain. Check the connection.' : err.message)}</p><button class="btn" data-retry>${retryLabel}</button></div>`;
@@ -151,11 +174,10 @@ async function viewHome() {
   const greet = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const v = frame('today', `
     <section class="home-search">
-      <h1 id="greet">${greet}.</h1>
-      <p class="sub" id="statline">${niceDay(today())}</p>
+      <p class="fig"><span>FIG. 01 — RECALL</span><span id="statline">${esc(niceDay(today()).toUpperCase())}</span></p>
+      <p class="greet" id="greet">${greet}.</p>
       <form class="bigsearch" id="bigsearch" role="search">
-        ${icon('search')}
-        <input id="q" name="q" type="search" enterkeyhint="search" aria-label="Search your brain" placeholder="What did I decide about…" autocomplete="off" value="${esc(q)}">
+        <input id="q" name="q" type="search" enterkeyhint="search" aria-label="Search your brain" placeholder="Ask your mind…" autocomplete="off" value="${esc(q)}">
         <span class="badge" id="sem" hidden title="Results match meaning, not just words">semantic</span>
         <kbd>/</kbd>
       </form>
@@ -176,7 +198,7 @@ async function viewHome() {
     try {
       const rows = await api(searchPath(q, kind));
       if (my !== seq) return;
-      results.innerHTML = `<h2>${q ? `Matches for “${esc(q)}”` : `All ${esc(kind)}s`} <span class="count">${rows.length}</span></h2>
+      results.innerHTML = `<h2>${q ? `Specimens for “${esc(q)}”` : `All ${esc(kind)}s`} <span class="count">${rows.length}</span></h2>
         ${rows.length ? stream(rows) : `<div class="empty"><p>Nothing ${q ? `matches “${esc(q)}”` : 'of that kind yet'}.</p><div class="actions center"><a class="btn" href="#/ask">Ask instead</a><a class="btn" href="#/capture${q ? `?text=${encodeURIComponent(q)}` : ''}">Capture it</a></div></div>`}`;
     } catch (err) {
       if (my !== seq || err.message === 'unauthorized') return;
@@ -197,10 +219,12 @@ async function viewHome() {
   health().then((h) => {
     if (h.semantic) $('#sem', v).hidden = false;
     if (h.owner) $('#greet', v).innerHTML = `${greet}, <em>${esc(h.owner)}</em>.`;
+    if (h.semantic) $('#bigsearch', v).classList.add('semantic');
   }).catch(() => {});
   if (q || kind !== 'all') runSearch();
   else if (location.hash.startsWith('#/search')) input.focus();
   loadFeed($('#today-feed', v));
+  memoryField();
 }
 
 async function loadFeed(el) {
@@ -211,7 +235,7 @@ async function loadFeed(el) {
       api('/api/stats'), api(`/api/memories?day=${t}&limit=60&status=any`), api(`/api/digest?day=${shift(t, -1)}`),
     ]);
     const line = $('#statline');
-    if (line) line.textContent = `${niceDay(t)} · ${stats.total.toLocaleString()} memories across ${stats.projects} projects`;
+    if (line) line.textContent = `${niceDay(t)} · ${stats.total.toLocaleString()} memories · ${stats.projects} projects`.toUpperCase();
     const heat = new Map(stats.heat.map((h) => [h.day, h.count]));
     const max = Math.max(1, ...stats.heat.map((h) => h.count));
     const start = shift(t, -(7 * 17 - 1) - new Date(`${t}T12:00:00`).getDay());
@@ -230,7 +254,7 @@ async function loadFeed(el) {
         <div class="tile"><b>${stats.pages_today}</b><span>pages read</span></div>
         <div class="tile"><b>${stats.knowledge}</b><span>decisions & lessons</span></div>
       </div>
-      <h2>Activity</h2>
+      <h2>Activity <span class="count">17 wk</span></h2>
       <div class="heat-wrap"><div class="heat">${cells.join('')}</div><div class="heat-legend"><span>17 weeks</span><span>${stats.bySource.slice(0, 4).map((s) => `${esc(s.source)} ${s.count}`).join(' · ')}</span></div></div>
       ${digest ? `<h2>Yesterday, digested</h2><div class="card digest md">${md(digest.body)}</div>` : ''}
       <h2>Agents & notes today <span class="count">${agents.length}</span></h2>
@@ -245,49 +269,42 @@ async function loadFeed(el) {
 }
 
 // ---------- landing ----------
+const DIAGRAM = `<svg class="l-diagram" viewBox="0 0 600 180" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+  <g class="d-lines"><path d="M60 90 H270"/><path d="M330 90 H540"/><path d="M60 90 C120 20 200 20 270 70"/><path d="M330 110 C400 160 480 160 540 90"/><path d="M300 30 V150"/></g>
+  <g class="d-nodes"><circle cx="60" cy="90" r="7"/><circle cx="300" cy="90" r="12"/><circle cx="540" cy="90" r="7"/></g>
+  <g class="d-labels"><text x="60" y="128">CAPTURE</text><text x="300" y="132">REMEMBER</text><text x="540" y="128">RECALL</text></g>
+</svg>`;
 function viewLanding(signedIn) {
   const mcp = mcpUrl(location.origin);
   const cta = signedIn ? '<a class="btn primary lg" href="#/">Back to your brain</a>' : '<a class="btn primary lg" href="#/login">Open your brain</a>';
+  const sec = (n, label, body, note = '') => `<section class="l-sec"><p class="l-label"><span class="l-n">${n}</span>${label}</p><div class="l-body">${body}</div>${note ? `<aside class="l-note">${note}</aside>` : ''}</section>`;
   app.innerHTML = `<div class="landing">
-    <header class="l-top"><a class="brand" href="#/"><span class="brand-dot"></span>brain</a>${signedIn ? '<a class="btn ghost" href="#/">Your brain</a>' : '<a class="btn ghost" href="#/login">Sign in</a>'}</header>
+    <header class="l-top"><a class="brand" href="#/"><span class="brand-dot"></span>brain</a><span class="l-coord" aria-hidden="true">N° 001 · ARCHIVE OF A MIND</span>${signedIn ? '<a class="btn ghost" href="#/">Your brain</a>' : '<a class="btn ghost" href="#/login">Sign in</a>'}</header>
     <section class="l-hero">
-      <p class="eyebrow">A memory you own</p>
-      <h1 class="display">The brain that sits between <em>you</em> and your AI.</h1>
-      <p class="lede">Claude Code, Cursor, ChatGPT, Claude.ai and your browser all read and write one memory — yours. Switch models, switch vendors; what you know stays put.</p>
-      ${cta}
-    </section>
-    <section class="l-sec">
-      <h2>How it works</h2>
-      <ol class="l-steps">
-        <li><span class="l-num">01</span><h3>Capture</h3><p>Sessions, decisions and the pages you read flow in from every agent and device — or you type a thought.</p></li>
-        <li><span class="l-num">02</span><h3>Remember</h3><p>Lessons, preferences and todos are kept short, deduped and searchable, on a server you control.</p></li>
-        <li><span class="l-num">03</span><h3>Recall</h3><p>Every agent starts with a briefing of what matters, and can search the rest when it needs to.</p></li>
-      </ol>
-    </section>
-    <section class="l-sec">
-      <h2>Connect your AI</h2>
-      <p class="sub">One MCP endpoint. Point every client at it with your token.</p>
-      <div class="copyrow"><code id="mcpurl">${esc(mcp)}</code><button class="btn" id="copymcp" aria-label="Copy MCP URL">Copy</button></div>
-      <ul class="l-clients">
-        <li><b>Claude Code</b><span>claude mcp add --transport http brain ${esc(mcp)}</span></li>
-        <li><b>Cursor</b><span>Settings → MCP → add server URL</span></li>
-        <li><b>claude.ai</b><span>Settings → Connectors → add custom connector</span></li>
-        <li><b>Chrome</b><span>The brain extension captures what you read</span></li>
-      </ul>
-    </section>
-    <section class="l-sec">
-      <h2>Ask it anything</h2>
-      <div class="l-show" aria-hidden="true">
-        <div class="bigsearch fake">${icon('search')}<span>why did we pick Neon</span></div>
-        <div class="mem"><div class="mem-top">${kindTag('decision')}<span class="chip">brain</span><time>3d</time></div><div class="mem-title">Postgres on Neon, not a vector DB</div><div class="mem-body">${md('Chose ⟦Neon⟧ for branching and full-text search in one place; embeddings can come later.')}</div></div>
-        <div class="mem"><div class="mem-top">${kindTag('lesson')}<time>1w</time></div><div class="mem-title">Preview branches need their own token</div><div class="mem-body">${md('Each ⟦Neon⟧ branch gets a fresh URL — wire it per deploy.')}</div></div>
+      <p class="fig"><span>FIG. 00 — SPECIMEN</span><span>ONE MEMORY · EVERY AGENT</span></p>
+      <h1 class="display">The brain <em>between</em> you and your AI.</h1>
+      <div class="l-hero-foot">
+        <p class="lede">Claude Code, Cursor, ChatGPT and your browser read and write one memory. Yours. Switch models; what you know stays.</p>
+        ${cta}
       </div>
     </section>
-    <footer class="l-foot"><span class="display-sm">Self-hosted. Yours.</span>${cta}</footer>
+    ${sec('01', 'The problem', '<h2 class="l-h">Your memory is scattered across vendors.</h2><p>Every assistant keeps its own notes and forgets them on the next tab. Decisions live in one chat, lessons in another, the article that changed your mind in a third.</p>', 'Three tools, three memories, none of them yours.')}
+    ${sec('02', 'The brain', '<h2 class="l-h">One archive. Every agent reads it first.</h2><p>Each session starts with a short briefing of what matters, and ends by writing back what it learned. You own the database.</p>', 'MCP · HTTP · Chrome')}
+    ${sec('03', 'The loop', `<h2 class="l-h">Capture → Remember → Recall.</h2>${DIAGRAM}<ol class="l-legend"><li><b>Capture.</b> Sessions, decisions, pages you read, a thought you type.</li><li><b>Remember.</b> Kept short, deduped, searchable by meaning.</li><li><b>Recall.</b> Briefings on start; search when an agent needs more.</li></ol>`)}
+    ${sec('04', 'Connect', `<h2 class="l-h">One endpoint for every client.</h2>
+      <div class="copyrow"><code id="mcpurl">${esc(mcp)}</code><button class="btn" id="copymcp" aria-label="Copy MCP URL">Copy</button></div>
+      <dl class="l-clients">
+        <dt>Claude Code</dt><dd><code>claude mcp add --transport http brain ${esc(mcp)}</code></dd>
+        <dt>Cursor</dt><dd>Settings → MCP → add server URL</dd>
+        <dt>claude.ai</dt><dd>Settings → Connectors → add custom connector</dd>
+        <dt>Chrome</dt><dd>The brain extension captures what you read</dd>
+      </dl>`, 'Bring your token. Nothing leaves without it.')}
+    <footer class="l-foot"><p class="l-label"><span class="l-n">05</span>Ownership</p><p class="display-sm">Self-hosted. <em>Yours.</em></p>${cta}</footer>
   </div>`;
   $('#copymcp').onclick = async () => {
     try { await navigator.clipboard.writeText(mcp); toast('MCP URL copied'); } catch { toast('Select the URL and copy it'); }
   };
+  setField({ intensity: 1 });
   window.scrollTo(0, 0);
 }
 
@@ -477,9 +494,11 @@ async function viewSettings() {
 }
 
 function renderLogin(error) {
+  setField(null);
   app.innerHTML = `<div class="login"><form class="card" id="lf">
     <a class="brand" href="#/about"><span class="brand-dot"></span>brain</a>
-    <h1 class="login-h">Open your brain</h1>
+    <p class="fig"><span>FIG. 00 — ACCESS</span></p>
+    <h1 class="login-h">Open your <em>brain</em></h1>
     <p class="sub">Paste your access token (from <code>data/token.txt</code> or your host’s <code>BRAIN_TOKEN</code>).</p>
     ${error ? `<p class="err" role="alert">${esc(error)}</p>` : ''}
     <label class="sr" for="tok">Access token</label>
@@ -500,6 +519,7 @@ async function route() {
   const { path } = parseRoute(location.hash);
   const signedIn = !!store.get(TOKEN_KEY);
   const view = resolveRoute(path, signedIn);
+  if (view !== 'home') setField(null);
   try {
     if (view === 'landing') return viewLanding(signedIn);
     if (view === 'login') return renderLogin();

@@ -1,24 +1,59 @@
-// First-load brain intro: outline draws itself, neurons light and connect, then it dissolves.
-// Once per session; skippable; crossfade only under prefers-reduced-motion.
-import { introMode } from './lib.js';
+// First-load intro: the neural field ignites from one point — nodes fire outward,
+// synapses connect, then the wordmark resolves. ≤1.6s, skippable, once per session;
+// a plain crossfade of the wordmark under prefers-reduced-motion.
+import { introMode, fieldBudget } from './lib.js';
 
 const KEY = 'brain.intro';
-const half = `
-  <path class="lobe" pathLength="1" d="M60 16C50 6 32 8 26 20C14 22 9 36 15 46C7 55 11 71 23 75C27 87 44 92 54 85C57 88 60 88 60 86V16"/>
-  <path class="fold" pathLength="1" d="M30 34C38 30 44 36 42 44"/>
-  <path class="fold" pathLength="1" d="M22 58C30 53 40 59 37 68"/>
-  <path class="fold" pathLength="1" d="M46 22C51 28 49 34 44 37"/>
-  <path class="fold" pathLength="1" d="M50 52C44 56 46 64 52 68"/>`;
-const NODES = [[34, 30], [44, 46], [26, 52], [40, 70], [52, 30], [68, 28], [78, 46], [92, 52], [80, 70], [60, 54]];
-const LINKS = [[0, 1], [1, 2], [1, 3], [1, 9], [4, 9], [4, 5], [5, 6], [6, 9], [6, 7], [7, 8], [8, 9], [3, 9]];
-const svg = () => `<svg class="intro-mark" viewBox="0 0 120 100" aria-hidden="true">
-  <g class="outline">${half}</g><g class="outline" transform="translate(120 0) scale(-1 1)">${half}</g>
-  <g class="syn">${LINKS.map(([a, b], i) => `<line pathLength="1" style="--i:${i}" x1="${NODES[a][0]}" y1="${NODES[a][1]}" x2="${NODES[b][0]}" y2="${NODES[b][1]}"/>`).join('')}</g>
-  <g class="neurons">${NODES.map(([x, y], i) => `<circle style="--i:${i}" cx="${x}" cy="${y}" r="2.2"/>`).join('')}</g>
-</svg>`;
-
+const DURATION = 1500;
 function seen() { try { return sessionStorage.getItem(KEY) === '1'; } catch { return false; } }
 function markSeen() { try { sessionStorage.setItem(KEY, '1'); } catch {} }
+const ease = (t) => 1 - (1 - t) ** 3;
+
+function ignite(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = innerWidth, h = innerHeight;
+  const { dpr, nodes: count } = fieldBudget({ width: w, dpr: devicePixelRatio });
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  canvas.style.width = `${w}px`; canvas.style.height = `${h}px`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const cs = getComputedStyle(document.documentElement);
+  const signal = cs.getPropertyValue('--accent').trim(), ink = cs.getPropertyValue('--field-node').trim();
+  const reach = Math.hypot(w, h) * 0.55;
+  const nodes = Array.from({ length: count }, (_, i) => {
+    const a = (i / count) * Math.PI * 2 + Math.random() * 0.4;
+    return { a, d: reach * (0.12 + Math.random() ** 0.7 * 0.88), delay: Math.random() * 0.25 };
+  });
+  const start = performance.now();
+  let raf = 0;
+  const tick = (now) => {
+    const t = Math.min(1, (now - start) / DURATION);
+    ctx.clearRect(0, 0, w, h);
+    const pts = nodes.map((n) => {
+      const p = ease(Math.max(0, Math.min(1, (t - n.delay) / 0.6)));
+      return [w / 2 + Math.cos(n.a) * n.d * p, h / 2 + Math.sin(n.a) * n.d * p, p];
+    });
+    const link = Math.max(0, (t - 0.3) / 0.5);
+    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = signal;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+        if (d > 120) continue;
+        ctx.globalAlpha = Math.min(1, link) * (1 - d / 120) * 0.7;
+        ctx.beginPath(); ctx.moveTo(pts[i][0], pts[i][1]); ctx.lineTo(pts[j][0], pts[j][1]); ctx.stroke();
+      }
+    }
+    for (const [x, y, p] of pts) {
+      ctx.globalAlpha = p;
+      ctx.fillStyle = p < 1 ? signal : ink;
+      ctx.beginPath(); ctx.arc(x, y, 1.6 + (1 - p) * 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (t < 1) raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(raf);
+}
 
 export function playIntro() {
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -28,17 +63,19 @@ export function playIntro() {
   const el = document.createElement('div');
   el.className = `intro ${mode}`;
   el.setAttribute('role', 'presentation');
-  el.innerHTML = `${mode === 'full' ? svg() : ''}<div class="intro-word">brain</div>`;
+  el.innerHTML = `${mode === 'full' ? '<canvas class="intro-field" aria-hidden="true"></canvas>' : ''}<div class="intro-word">brain</div><p class="intro-note">FIG. 00 — IGNITION · TAP TO SKIP</p>`;
   document.body.append(el);
+  const stop = mode === 'full' ? ignite(el.querySelector('canvas')) : () => {};
   let done = false;
   const finish = () => {
     if (done) return;
     done = true;
+    stop();
     el.classList.add('out');
     removeEventListener('keydown', finish, true);
     setTimeout(() => el.remove(), 360);
   };
   el.addEventListener('pointerdown', finish);
   addEventListener('keydown', finish, true);
-  setTimeout(finish, mode === 'full' ? 1400 : 300);
+  setTimeout(finish, mode === 'full' ? DURATION + 100 : 300);
 }
