@@ -1,3 +1,4 @@
+import { embedText, embedTexts, memoryText } from './embed.js';
 import { dayOf, shiftDay, scrub, titleFrom, extractiveSummary, domainOf, orQuery, clip } from './util.js';
 
 export const KINDS = [
@@ -11,8 +12,65 @@ const COLS = `id, kind, title, body, summary, source, project, tags, url, meta, 
 const LIST_COLS = `id, kind, title, left(body, 700) AS body, length(body) AS body_len, summary, source, project, tags,
   url, meta, pinned, status, day::text AS day, created_at, updated_at`;
 
+// Hybrid ranking: reciprocal-rank fusion of full-text and vector results.
+function fuse(text, vectors, lim) {
+  const score = new Map();
+  const add = (list) => list.forEach((r, i) => {
+    const cur = score.get(r.id) || { row: r, s: 0 };
+    cur.s += 1 / (60 + i);
+    if (r.snippet && !cur.row.snippet) cur.row = { ...cur.row, snippet: r.snippet };
+    score.set(r.id, cur);
+  });
+  add(text);
+  add(vectors);
+  return [...score.values()].sort((a, b) => b.s - a.s).slice(0, lim).map((x) => ({ ...x.row, rank: x.s }));
+}
+
 export function createStore(db) {
   const q = async (sql, params) => (await db.query(sql, params)).rows;
+  const vec = (v) => `[${v.join(',')}]`;
+
+  // Fire-and-forget: embed a freshly written memory when semantic search is on.
+  function embedLater(m) {
+    if (!db.vector || !m?.id) return;
+    embedText(memoryText(m))
+      .then((v) => v && q('UPDATE memories SET embedding = $1::vector WHERE id = $2', [vec(v), m.id]))
+      .catch((e) => console.error('[embed]', e.message));
+  }
+
+  const missing = async () => Number((await q(`SELECT count(*)::int AS n FROM memories WHERE embedding IS NULL AND status <> 'archived'`))[0].n);
+
+  // Embed up to `limit` memories that have no vector yet.
+  async function backfillEmbeddings(limit = 64) {
+    if (!db.vector) return { done: 0, remaining: 0, reason: 'pgvector off' };
+    const rows = await q(`SELECT id, title, project, summary, left(body, 6000) AS body FROM memories
+                          WHERE embedding IS NULL AND status <> 'archived' ORDER BY created_at DESC LIMIT ${Math.min(Number(limit) || 64, 256)}`);
+    let done = 0;
+    for (let i = 0; i < rows.length; i += 16) {
+      const batch = rows.slice(i, i + 16);
+      const vecs = await embedTexts(batch.map(memoryText));
+      if (!vecs) return { done, remaining: await missing(), reason: 'embeddings unavailable' };
+      for (let j = 0; j < batch.length; j++) await q('UPDATE memories SET embedding = $1::vector WHERE id = $2', [vec(vecs[j]), batch[j].id]);
+      done += batch.length;
+    }
+    return { done, remaining: await missing() };
+  }
+
+  // Nearest memories by meaning; null when embeddings are unavailable.
+  async function semantic(query, where, p, lim) {
+    if (!db.vector) return null;
+    const v = await embedText(query, { query: true });
+    if (!v) return null;
+    const params = [...p, vec(v)];
+    const n = params.length;
+    const hits = await q(
+      `SELECT ${LIST_COLS}, 1 - (embedding <=> $${n}::vector) AS similarity FROM memories
+       WHERE ${[...where, 'embedding IS NOT NULL'].join(' AND ')}
+       ORDER BY embedding <=> $${n}::vector LIMIT ${lim}`,
+      params,
+    );
+    return hits.filter((h) => h.similarity > 0.3);
+  }
 
   async function remember(m) {
     const body = scrub(m.body ?? m.content ?? '');
@@ -43,6 +101,7 @@ export function createStore(db) {
         Boolean(m.day),
       ],
     );
+    embedLater(rows[0]);
     return rows[0];
   }
 
@@ -103,6 +162,7 @@ export function createStore(db) {
       return q(`SELECT ${LIST_COLS} FROM memories ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
                 ORDER BY pinned DESC, created_at DESC LIMIT ${lim} OFFSET ${off}`, p);
     }
+    const vecHits = await semantic(String(query), [...where], [...p], lim);
     const tsq = arg(mode === 'or' ? orQuery(query) : String(query));
     const rows = await q(
       `SELECT ${LIST_COLS}, ts_rank(tsv, websearch_to_tsquery('english', ${tsq})) AS rank,
@@ -112,6 +172,7 @@ export function createStore(db) {
        ORDER BY rank DESC, created_at DESC LIMIT ${lim} OFFSET ${off}`,
       p,
     );
+    if (vecHits?.length) return fuse(rows, vecHits, lim);
     if (rows.length || mode === 'or') return rows;
     // Partial words / URLs: fall back to substring match, then to an OR query.
     p.pop();
@@ -239,5 +300,5 @@ export function createStore(db) {
     return q(`SELECT ${COLS} FROM memories ORDER BY id`);
   }
 
-  return { remember, recordVisit, search, get, update, forget, projects, stats, brief, pendingForDay, saveDigest, daysNeedingDigest, exportAll, query: q };
+  return { backfillEmbeddings, semanticOn: () => Boolean(db.vector), remember, recordVisit, search, get, update, forget, projects, stats, brief, pendingForDay, saveDigest, daysNeedingDigest, exportAll, query: q };
 }

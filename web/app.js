@@ -1,4 +1,8 @@
 // Brain web app — no build step, no framework. Hash routes, one render() per view.
+import { parseRoute, resolveRoute, searchPath, mcpUrl, kindGlyph, kindVar, specimenMeta } from './lib.js';
+import { playIntro } from './intro.js';
+import { mountField } from './field.js';
+
 const $ = (sel, el = document) => el.querySelector(sel);
 const app = $('#app');
 const TOKEN_KEY = 'brain.token';
@@ -9,20 +13,20 @@ const store = {
 
 // ---------- api ----------
 async function api(path, opts = {}) {
+  if (navigator.onLine === false) throw new Error('You’re offline. Your brain will be here when you reconnect.');
   const res = await fetch(path, {
     ...opts,
     headers: { Authorization: `Bearer ${store.get(TOKEN_KEY) || ''}`, 'Content-Type': 'application/json', 'X-Brain-Source': 'web', ...(opts.headers || {}) },
     body: opts.body && typeof opts.body !== 'string' ? JSON.stringify(opts.body) : opts.body,
   });
-  if (res.status === 401) { store.set(TOKEN_KEY, null); renderLogin('That token didn’t work.'); throw new Error('unauthorized'); }
+  if (res.status === 401) { store.set(TOKEN_KEY, null); healthP = null; renderLogin('That token didn’t work.'); throw new Error('unauthorized'); }
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   return res.headers.get('content-type')?.includes('json') ? res.json() : res.text();
 }
 
 // ---------- helpers ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const KIND_VAR = { session: 'session', decision: 'decision', lesson: 'lesson', preference: 'preference', profile: 'preference', browse: 'browse', digest: 'digest', todo: 'todo', skill: 'skill', agent: 'agent', prompt: 'prompt', 'prompt-log': 'prompt', playbook: 'skill', highlight: 'highlight', bookmark: 'browse', voice: 'note' };
-const kindTag = (k) => `<span class="kind" style="--c: var(--k-${KIND_VAR[k] || 'note'})">${esc(k)}</span>`;
+const kindTag = (k) => `<span class="kind" style="--c: var(--k-${kindVar(k)})"><i aria-hidden="true">${kindGlyph(k)}</i>${esc(k)}</span>`;
 const domain = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
 const today = () => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const shift = (day, n) => { const d = new Date(`${day}T12:00:00`); d.setDate(d.getDate() + n); return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); };
@@ -78,14 +82,36 @@ function md(src) {
 
 function card(m) {
   const text = m.snippet ? md(m.snippet.replace(/\n+/g, ' ')) : esc(m.summary || (m.body || '').replace(/[#*`>]/g, '').slice(0, 400));
+  const [, ...rest] = specimenMeta(m, ago(m.created_at));
   return `<a class="mem" href="#/m/${m.id}">
-    <div class="mem-top">${kindTag(m.kind)}${m.project ? `<span class="chip">${esc(m.project)}</span>` : ''}<span>${esc(m.source)}</span>${m.pinned ? '<span class="pin">● pinned</span>' : ''}${m.meta?.dwell ? `<span>${mins(m.meta.dwell)} read</span>` : ''}<time>${ago(m.created_at)}</time></div>
+    <div class="mem-top">${kindTag(m.kind)}${rest.map((x) => `<span>${esc(x)}</span>`).join('')}${m.source ? `<span>${esc(m.source)}</span>` : ''}${m.pinned ? '<span class="pin">◉ pinned</span>' : ''}${m.meta?.dwell ? `<span>${mins(m.meta.dwell)} read</span>` : ''}</div>
     <div class="mem-title">${esc(m.title)}</div>
     <div class="mem-body">${text}</div>
     ${m.url ? `<div class="mem-url">${esc(domain(m.url))}</div>` : ''}
   </a>`;
 }
 const stream = (rows, empty = 'Nothing here yet.') => (rows.length ? `<div class="stream">${rows.map(card).join('')}</div>` : `<div class="empty">${empty}</div>`);
+
+// ---------- neural field (one canvas behind every view) ----------
+let fieldStop = null;
+let fieldSeq = 0;
+function setField(opts) {
+  fieldSeq++;
+  fieldStop?.(); fieldStop = null;
+  const canvas = $('#field');
+  if (!canvas) return;
+  document.body.classList.toggle('has-field', !!opts);
+  if (opts) fieldStop = mountField(canvas, { ...opts, tip: $('#field-tip') });
+}
+// Home: start ambient and faint, then swap in real memories when they arrive.
+async function memoryField() {
+  setField({ intensity: 0.35 });
+  const mine = fieldSeq;
+  try {
+    const rows = await api('/api/memories?limit=120');
+    if (mine === fieldSeq && rows.length) setField({ memories: rows, intensity: 0.55 });
+  } catch {}
+}
 
 // ---------- icons ----------
 const ICON = {
@@ -100,85 +126,186 @@ const ICON = {
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
 };
 const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
-const NAV = [['today', 'Today', '#/'], ['search', 'Search', '#/search'], ['ask', 'Ask', '#/ask'], ['projects', 'Projects', '#/projects'], ['browsing', 'Browsing', '#/browsing'], ['library', 'Library', '#/library'], ['capture', 'Capture', '#/capture'], ['settings', 'Settings', '#/settings']];
-const TABS = ['today', 'search', 'ask', 'projects', 'browsing'];
+const NAV = [['today', 'Home', '#/'], ['ask', 'Ask', '#/ask'], ['projects', 'Projects', '#/projects'], ['browsing', 'Browsing', '#/browsing'], ['library', 'Library', '#/library'], ['capture', 'Capture', '#/capture'], ['settings', 'Settings', '#/settings']];
+const TABS = ['today', 'ask', 'projects', 'browsing', 'settings'];
 
-function frame(active, content) {
+let healthP = null;
+const health = () => (healthP ||= api('/api/health').catch((e) => { healthP = null; throw e; }));
+
+function frame(active, content, { search = true } = {}) {
   app.innerHTML = `<div class="shell">
     <aside class="side">
-      <div class="brand"><span class="brand-dot"></span>brain</div>
-      <nav class="nav">${NAV.map(([k, label, href]) => `<a href="${href}" class="${k === active ? 'on' : ''}">${icon(k)}${label}</a>`).join('')}</nav>
-      <div class="side-foot" id="health"></div>
+      <a class="brand" href="#/"><span class="brand-dot"></span>brain</a>
+      <nav class="nav">${NAV.map(([k, label, href], i) => `<a href="${href}" class="${k === active ? 'on' : ''}"${k === active ? ' aria-current="page"' : ''}><span class="nav-n">${String(i + 1).padStart(2, '0')}</span>${label}</a>`).join('')}</nav>
+      <div class="side-foot"><a href="#/about">Why brain</a><span id="health"></span></div>
     </aside>
     <main>
-      <div class="top">
-        <form class="searchbox" id="topsearch">${icon('search')}<input name="q" placeholder="Search everything you and your agents know…" autocomplete="off" value="${esc(active === 'search' ? params().get('q') || '' : '')}"><kbd>/</kbd></form>
+      ${search ? `<div class="top">
+        <form class="searchbox" id="topsearch" role="search">${icon('search')}<input name="q" aria-label="Search your brain" placeholder="Ask your mind…" autocomplete="off"><kbd>/</kbd></form>
         <a class="btn primary" href="#/capture">+ Capture</a>
-      </div>
+      </div>` : ''}
       <div id="view">${content}</div>
     </main>
     <nav class="tabbar">${TABS.map((k) => { const [, label, href] = NAV.find((n) => n[0] === k); return `<a href="${href}" class="${k === active ? 'on' : ''}">${icon(k)}${label}</a>`; }).join('')}</nav>
     <a class="fab" href="#/capture" aria-label="Capture">${icon('capture')}</a>
   </div>`;
-  $('#topsearch').onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q=${encodeURIComponent(e.target.q.value)}`; };
-  api('/api/health').then((h) => { const el = $('#health'); if (el) el.textContent = `${h.db} · cortex ${h.cortex ? 'on' : 'off'}`; }).catch(() => {});
+  const ts = $('#topsearch');
+  if (ts) ts.onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q=${encodeURIComponent(e.target.q.value)}`; };
+  health().then((h) => { const el = $('#health'); if (el) el.textContent = `${h.db} · cortex ${h.cortex ? 'on' : 'off'}`; }).catch(() => {});
   return $('#view');
 }
-const loading = (active) => frame(active, '<div class="empty">Loading…</div>');
-function params() { const q = location.hash.split('?')[1] || ''; return new URLSearchParams(q); }
+// Skeletons shaped like the content they stand in for.
+const skelCards = (n = 3) => `<div class="stream" aria-busy="true" aria-label="Loading">${'<div class="mem skel"><i></i><i></i><i></i></div>'.repeat(n)}</div>`;
+const loading = (active) => frame(active, `<div class="skel-h"></div>${skelCards(4)}`);
+const fig = (n, label, extra = '') => `<p class="fig"><span>FIG. ${String(n).padStart(2, '0')} — ${esc(label)}</span>${extra ? `<span>${extra}</span>` : ''}</p>`;
+function params() { return parseRoute(location.hash).params; }
+function failState(err, retryLabel = 'Try again') {
+  return `<div class="empty fail" role="alert"><p>${esc(err.message === 'Failed to fetch' ? 'Couldn’t reach your brain. Check the connection.' : err.message)}</p><button class="btn" data-retry>${retryLabel}</button></div>`;
+}
+function bindRetry(el, fn) { el.querySelectorAll('[data-retry]').forEach((b) => { b.onclick = fn; }); }
 
-// ---------- views ----------
-async function viewToday() {
-  const v = loading('today');
-  const t = today();
-  const [stats, rows, digestRes, health] = await Promise.all([
-    api('/api/stats'), api(`/api/memories?day=${t}&limit=60&status=any`), api(`/api/digest?day=${shift(t, -1)}`), api('/api/health'),
-  ]);
+// ---------- home: search first, today below ----------
+const SEARCH_KINDS = ['all', 'decision', 'lesson', 'preference', 'todo', 'session', 'note', 'browse', 'digest', 'skill'];
+async function viewHome() {
+  const p = params();
+  let q = p.get('q') || '';
+  let kind = p.get('kind') || 'all';
   const hour = new Date().getHours();
   const greet = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const heat = new Map(stats.heat.map((h) => [h.day, h.count]));
-  const max = Math.max(1, ...stats.heat.map((h) => h.count));
-  const start = shift(t, -(7 * 17 - 1) - new Date(`${t}T12:00:00`).getDay());
-  const cells = [];
-  for (let d = start; d <= t; d = shift(d, 1)) {
-    const c = heat.get(d) || 0;
-    cells.push(`<i title="${d}: ${c}" data-l="${c ? Math.min(4, Math.ceil((c / max) * 4)) : 0}"></i>`);
+  const v = frame('today', `
+    <section class="home-search">
+      <p class="fig"><span>FIG. 01 — RECALL</span><span id="statline">${esc(niceDay(today()).toUpperCase())}</span></p>
+      <p class="greet" id="greet">${greet}.</p>
+      <form class="bigsearch" id="bigsearch" role="search">
+        <input id="q" name="q" type="search" enterkeyhint="search" aria-label="Search your brain" placeholder="Ask your mind…" autocomplete="off" value="${esc(q)}">
+        <span class="badge" id="sem" hidden title="Results match meaning, not just words">semantic</span>
+        <kbd>/</kbd>
+      </form>
+      <div class="chips" role="group" aria-label="Filter by kind">${SEARCH_KINDS.map((k) => `<button type="button" data-k="${k}" aria-pressed="${k === kind}" class="${k === kind ? 'on' : ''}">${k}</button>`).join('')}</div>
+    </section>
+    <section id="results" aria-live="polite"></section>
+    <section id="today-feed">${skelCards(3)}</section>`, { search: false });
+  const input = $('#q', v);
+  const results = $('#results', v);
+  let seq = 0;
+  const sync = () => history.replaceState(null, '', q || kind !== 'all' ? `#/search?q=${encodeURIComponent(q)}${kind !== 'all' ? `&kind=${kind}` : ''}` : '#/');
+  async function runSearch() {
+    sync();
+    $('#today-feed', v).hidden = !!(q || kind !== 'all');
+    if (!q && kind === 'all') { results.innerHTML = ''; return; }
+    const my = ++seq;
+    results.innerHTML = skelCards(3);
+    try {
+      const rows = await api(searchPath(q, kind));
+      if (my !== seq) return;
+      results.innerHTML = `<h2>${q ? `Specimens for “${esc(q)}”` : `All ${esc(kind)}s`} <span class="count">${rows.length}</span></h2>
+        ${rows.length ? stream(rows) : `<div class="empty"><p>Nothing ${q ? `matches “${esc(q)}”` : 'of that kind yet'}.</p><div class="actions center"><a class="btn" href="#/ask">Ask instead</a><a class="btn" href="#/capture${q ? `?text=${encodeURIComponent(q)}` : ''}">Capture it</a></div></div>`}`;
+    } catch (err) {
+      if (my !== seq || err.message === 'unauthorized') return;
+      results.innerHTML = failState(err);
+      bindRetry(results, runSearch);
+    }
   }
-  const agents = rows.filter((r) => r.kind !== 'browse');
-  const pages = rows.filter((r) => r.kind === 'browse');
-  const digest = digestRes.digest;
-  v.innerHTML = `
-    <h1>${greet}${health.owner ? `, <em>${esc(health.owner)}</em>` : ''}.</h1>
-    <p class="sub">${niceDay(t)} · ${stats.total.toLocaleString()} memories across ${stats.projects} projects</p>
-    <div class="tiles">
-      <div class="tile"><b>${stats.today}</b><span>captured today</span></div>
-      <div class="tile"><b>${stats.sessions_today}</b><span>agent sessions</span></div>
-      <div class="tile"><b>${stats.pages_today}</b><span>pages read</span></div>
-      <div class="tile"><b>${stats.knowledge}</b><span>decisions & lessons</span></div>
-    </div>
-    <h2>Activity</h2>
-    <div class="heat-wrap"><div class="heat">${cells.join('')}</div><div class="heat-legend"><span>17 weeks</span><span>${stats.bySource.slice(0, 4).map((s) => `${esc(s.source)} ${s.count}`).join(' · ')}</span></div></div>
-    ${digest ? `<h2>Yesterday, digested</h2><div class="card digest md">${md(digest.body)}</div>` : ''}
-    <h2>Agents & notes today <span class="count">${agents.length}</span></h2>
-    ${stream(agents, 'Quiet so far. Sessions from Claude Code and anything you capture land here.')}
-    <h2>Reading today <span class="count">${pages.length}</span></h2>
-    ${stream(pages.slice(0, 12), 'Install the Chrome extension to capture what you read.')}`;
+  let t;
+  input.oninput = () => { clearTimeout(t); t = setTimeout(() => { q = input.value.trim(); runSearch(); }, 220); };
+  $('#bigsearch', v).onsubmit = (e) => { e.preventDefault(); clearTimeout(t); q = input.value.trim(); runSearch(); input.blur(); };
+  v.querySelectorAll('.chips button').forEach((b) => {
+    b.onclick = () => {
+      kind = b.dataset.k;
+      v.querySelectorAll('.chips button').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-pressed', on); });
+      runSearch();
+    };
+  });
+  health().then((h) => {
+    if (h.semantic) $('#sem', v).hidden = false;
+    if (h.owner) $('#greet', v).innerHTML = `${greet}, <em>${esc(h.owner)}</em>.`;
+    if (h.semantic) $('#bigsearch', v).classList.add('semantic');
+  }).catch(() => {});
+  if (q || kind !== 'all') runSearch();
+  else if (location.hash.startsWith('#/search')) input.focus();
+  loadFeed($('#today-feed', v));
+  memoryField();
 }
 
-const SEARCH_KINDS = ['all', 'session', 'decision', 'lesson', 'preference', 'todo', 'browse', 'digest', 'note', 'prompt-log', 'skill'];
-async function viewSearch() {
-  const p = params();
-  const q = p.get('q') || '';
-  const kind = p.get('kind') || 'all';
-  const v = loading('search');
-  const rows = await api(`/api/memories?limit=60${q ? `&q=${encodeURIComponent(q)}` : ''}${kind !== 'all' ? `&kind=${kind}` : ''}`);
-  v.innerHTML = `<h1>${q ? `“${esc(q)}”` : 'Everything'}</h1>
-    <p class="sub">${rows.length} result${rows.length === 1 ? '' : 's'}</p>
-    <div class="chips">${SEARCH_KINDS.map((k) => `<button data-k="${k}" class="${k === kind ? 'on' : ''}">${k}</button>`).join('')}</div>
-    ${stream(rows, 'No matches. Try fewer words, or Ask.')}`;
-  v.querySelectorAll('.chips button').forEach((b) => { b.onclick = () => { location.hash = `#/search?q=${encodeURIComponent(q)}&kind=${b.dataset.k}`; }; });
-  const input = $('#topsearch input');
-  if (input && !q) input.focus();
+async function loadFeed(el) {
+  const t = today();
+  el.innerHTML = skelCards(3);
+  try {
+    const [stats, rows, digestRes] = await Promise.all([
+      api('/api/stats'), api(`/api/memories?day=${t}&limit=60&status=any`), api(`/api/digest?day=${shift(t, -1)}`),
+    ]);
+    const line = $('#statline');
+    if (line) line.textContent = `${niceDay(t)} · ${stats.total.toLocaleString()} memories · ${stats.projects} projects`.toUpperCase();
+    const heat = new Map(stats.heat.map((h) => [h.day, h.count]));
+    const max = Math.max(1, ...stats.heat.map((h) => h.count));
+    const start = shift(t, -(7 * 17 - 1) - new Date(`${t}T12:00:00`).getDay());
+    const cells = [];
+    for (let d = start; d <= t; d = shift(d, 1)) {
+      const c = heat.get(d) || 0;
+      cells.push(`<i title="${d}: ${c}" data-l="${c ? Math.min(4, Math.ceil((c / max) * 4)) : 0}"></i>`);
+    }
+    const agents = rows.filter((r) => r.kind !== 'browse');
+    const pages = rows.filter((r) => r.kind === 'browse');
+    const digest = digestRes.digest;
+    el.innerHTML = `
+      <div class="tiles">
+        <div class="tile"><b>${stats.today}</b><span>captured today</span></div>
+        <div class="tile"><b>${stats.sessions_today}</b><span>agent sessions</span></div>
+        <div class="tile"><b>${stats.pages_today}</b><span>pages read</span></div>
+        <div class="tile"><b>${stats.knowledge}</b><span>decisions & lessons</span></div>
+      </div>
+      <h2>Activity <span class="count">17 wk</span></h2>
+      <div class="heat-wrap"><div class="heat">${cells.join('')}</div><div class="heat-legend"><span>17 weeks</span><span>${stats.bySource.slice(0, 4).map((s) => `${esc(s.source)} ${s.count}`).join(' · ')}</span></div></div>
+      ${digest ? `<h2>Yesterday, digested</h2><div class="card digest md">${md(digest.body)}</div>` : ''}
+      <h2>Agents & notes today <span class="count">${agents.length}</span></h2>
+      ${agents.length ? stream(agents) : '<div class="empty"><p>Quiet so far. Sessions from Claude Code and anything you capture land here.</p><div class="actions center"><a class="btn primary" href="#/capture">Capture a thought</a></div></div>'}
+      <h2>Reading today <span class="count">${pages.length}</span></h2>
+      ${stream(pages.slice(0, 12), 'Install the Chrome extension to capture what you read.')}`;
+  } catch (err) {
+    if (err.message === 'unauthorized') return;
+    el.innerHTML = failState(err);
+    bindRetry(el, () => loadFeed(el));
+  }
+}
+
+// ---------- landing ----------
+const DIAGRAM = `<svg class="l-diagram" viewBox="0 0 600 180" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+  <g class="d-lines"><path d="M60 90 H270"/><path d="M330 90 H540"/><path d="M60 90 C120 20 200 20 270 70"/><path d="M330 110 C400 160 480 160 540 90"/><path d="M300 30 V150"/></g>
+  <g class="d-nodes"><circle cx="60" cy="90" r="7"/><circle cx="300" cy="90" r="12"/><circle cx="540" cy="90" r="7"/></g>
+  <g class="d-labels"><text x="60" y="128">CAPTURE</text><text x="300" y="132">REMEMBER</text><text x="540" y="128">RECALL</text></g>
+</svg>`;
+function viewLanding(signedIn) {
+  const mcp = mcpUrl(location.origin);
+  const cta = signedIn ? '<a class="btn primary lg" href="#/">Back to your brain</a>' : '<a class="btn primary lg" href="#/login">Open your brain</a>';
+  const sec = (n, label, body, note = '') => `<section class="l-sec"><p class="l-label"><span class="l-n">${n}</span>${label}</p><div class="l-body">${body}</div>${note ? `<aside class="l-note">${note}</aside>` : ''}</section>`;
+  app.innerHTML = `<div class="landing">
+    <header class="l-top"><a class="brand" href="#/"><span class="brand-dot"></span>brain</a><span class="l-coord" aria-hidden="true">N° 001 · ARCHIVE OF A MIND</span>${signedIn ? '<a class="btn ghost" href="#/">Your brain</a>' : '<a class="btn ghost" href="#/login">Sign in</a>'}</header>
+    <section class="l-hero">
+      <p class="fig"><span>FIG. 00 — SPECIMEN</span><span>ONE MEMORY · EVERY AGENT</span></p>
+      <h1 class="display">The brain <em>between</em> you and your AI.</h1>
+      <div class="l-hero-foot">
+        <p class="lede">Claude Code, Cursor, ChatGPT and your browser read and write one memory. Yours. Switch models; what you know stays.</p>
+        ${cta}
+      </div>
+    </section>
+    ${sec('01', 'The problem', '<h2 class="l-h">Your memory is scattered across vendors.</h2><p>Every assistant keeps its own notes and forgets them on the next tab. Decisions live in one chat, lessons in another, the article that changed your mind in a third.</p>', 'Three tools, three memories, none of them yours.')}
+    ${sec('02', 'The brain', '<h2 class="l-h">One archive. Every agent reads it first.</h2><p>Each session starts with a short briefing of what matters, and ends by writing back what it learned. You own the database.</p>', 'MCP · HTTP · Chrome')}
+    ${sec('03', 'The loop', `<h2 class="l-h">Capture → Remember → Recall.</h2>${DIAGRAM}<ol class="l-legend"><li><b>Capture.</b> Sessions, decisions, pages you read, a thought you type.</li><li><b>Remember.</b> Kept short, deduped, searchable by meaning.</li><li><b>Recall.</b> Briefings on start; search when an agent needs more.</li></ol>`)}
+    ${sec('04', 'Connect', `<h2 class="l-h">One endpoint for every client.</h2>
+      <div class="copyrow"><code id="mcpurl">${esc(mcp)}</code><button class="btn" id="copymcp" aria-label="Copy MCP URL">Copy</button></div>
+      <dl class="l-clients">
+        <dt>Claude Code</dt><dd><code>claude mcp add --transport http brain ${esc(mcp)}</code></dd>
+        <dt>Cursor</dt><dd>Settings → MCP → add server URL</dd>
+        <dt>claude.ai</dt><dd>Settings → Connectors → add custom connector</dd>
+        <dt>Chrome</dt><dd>The brain extension captures what you read</dd>
+      </dl>`, 'Bring your token. Nothing leaves without it.')}
+    <footer class="l-foot"><p class="l-label"><span class="l-n">05</span>Ownership</p><p class="display-sm">Self-hosted. <em>Yours.</em></p>${cta}</footer>
+  </div>`;
+  $('#copymcp').onclick = async () => {
+    try { await navigator.clipboard.writeText(mcp); toast('MCP URL copied'); } catch { toast('Select the URL and copy it'); }
+  };
+  setField({ intensity: 1 });
+  window.scrollTo(0, 0);
 }
 
 const chatLog = [];
@@ -323,8 +450,8 @@ async function viewCapture() {
 async function viewSettings() {
   const origin = location.origin;
   const v = frame('settings', '');
-  const health = await api('/api/health');
-  v.innerHTML = `<h1>Settings</h1><p class="sub">Database: ${health.db} · Cortex (server-side AI): ${health.cortex ? 'on' : 'off — summaries are extractive; run /mcp__brain__dream from Claude Code'}</p>
+  const h = await health();
+  v.innerHTML = `<h1>Settings</h1><p class="sub">Database: ${h.db} · Cortex (server-side AI): ${h.cortex ? 'on' : 'off — summaries are extractive; run /mcp__brain__dream from Claude Code'}</p>
     <h2>Connect an agent</h2>
     <div class="card snippet">
       <p class="sub" style="margin:0">Claude Code (every project):</p>
@@ -363,47 +490,77 @@ async function viewSettings() {
     document.documentElement.dataset.theme = next;
     store.set('brain.theme', next);
   };
-  $('#out', v).onclick = () => { store.set(TOKEN_KEY, null); renderLogin(); };
+  $('#out', v).onclick = () => { store.set(TOKEN_KEY, null); healthP = null; location.hash = '#/about'; };
 }
 
 function renderLogin(error) {
+  setField(null);
   app.innerHTML = `<div class="login"><form class="card" id="lf">
-    <div class="brand" style="padding:0 0 14px"><span class="brand-dot"></span>brain</div>
+    <a class="brand" href="#/about"><span class="brand-dot"></span>brain</a>
+    <p class="fig"><span>FIG. 00 — ACCESS</span></p>
+    <h1 class="login-h">Open your <em>brain</em></h1>
     <p class="sub">Paste your access token (from <code>data/token.txt</code> or your host’s <code>BRAIN_TOKEN</code>).</p>
-    ${error ? `<p style="color:var(--danger)">${esc(error)}</p>` : ''}
-    <input class="field" name="t" type="password" placeholder="brn_…" autocomplete="current-password">
-    <div class="row"><button class="btn primary">Open my brain</button></div></form></div>`;
-  $('#lf').onsubmit = (e) => { e.preventDefault(); store.set(TOKEN_KEY, e.target.t.value.trim()); route(); };
+    ${error ? `<p class="err" role="alert">${esc(error)}</p>` : ''}
+    <label class="sr" for="tok">Access token</label>
+    <input class="field" id="tok" name="t" type="password" placeholder="brn_…" autocomplete="current-password" required>
+    <div class="row"><button class="btn primary">Open my brain</button></div>
+    <p class="sub small"><a href="#/about">What is this?</a></p></form></div>`;
+  $('#tok').focus();
+  $('#lf').onsubmit = (e) => {
+    e.preventDefault();
+    store.set(TOKEN_KEY, e.target.t.value.trim());
+    healthP = null;
+    if (location.hash === '#/' || !location.hash) route(); else location.hash = '#/';
+  };
 }
 
 // ---------- router ----------
 async function route() {
-  if (!store.get(TOKEN_KEY)) return renderLogin();
-  const path = location.hash.replace(/^#/, '').split('?')[0] || '/';
+  const { path } = parseRoute(location.hash);
+  const signedIn = !!store.get(TOKEN_KEY);
+  const view = resolveRoute(path, signedIn);
+  if (view !== 'home') setField(null);
   try {
-    if (path === '/') await viewToday();
-    else if (path === '/search') await viewSearch();
-    else if (path === '/ask') await viewAsk();
-    else if (path === '/projects') await viewProjects();
-    else if (path.startsWith('/project/')) await viewProject(decodeURIComponent(path.slice(9)));
-    else if (path === '/browsing') await viewBrowsing();
-    else if (path === '/library') await viewLibrary();
-    else if (path === '/capture') await viewCapture();
-    else if (path === '/settings') await viewSettings();
-    else if (path.startsWith('/m/')) await viewMemory(path.slice(3));
+    if (view === 'landing') return viewLanding(signedIn);
+    if (view === 'login') return renderLogin();
+    if (view === 'home') { if (path === '/login') { location.hash = '#/'; return; } await viewHome(); }
+    else if (view === 'ask') await viewAsk();
+    else if (view === 'projects') await viewProjects();
+    else if (view === 'project') await viewProject(decodeURIComponent(path.slice(9)));
+    else if (view === 'browsing') await viewBrowsing();
+    else if (view === 'library') await viewLibrary();
+    else if (view === 'capture') await viewCapture();
+    else if (view === 'settings') await viewSettings();
+    else if (view === 'memory') await viewMemory(path.slice(3));
     else location.hash = '#/';
     window.scrollTo(0, 0);
   } catch (err) {
-    if (err.message !== 'unauthorized') { const view = $('#view'); if (view) view.innerHTML = `<div class="empty">${esc(err.message)}</div>`; }
+    if (err.message === 'unauthorized') return;
+    const el = $('#view') || frame('', '');
+    el.innerHTML = failState(err);
+    bindRetry(el, route);
   }
+}
+
+function syncOnline() {
+  let bar = $('#offline');
+  if (navigator.onLine) { bar?.remove(); return; }
+  if (!bar) { bar = document.createElement('div'); bar.id = 'offline'; bar.className = 'offline'; bar.setAttribute('role', 'status'); bar.textContent = 'Offline — showing what’s on screen. New captures wait until you reconnect.'; document.body.append(bar); }
 }
 
 const savedTheme = store.get('brain.theme');
 if (savedTheme) document.documentElement.dataset.theme = savedTheme;
 window.addEventListener('hashchange', route);
+window.addEventListener('online', () => { syncOnline(); route(); });
+window.addEventListener('offline', syncOnline);
 document.addEventListener('keydown', (e) => {
   const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName);
-  if ((e.key === '/' && !typing) || (e.key === 'k' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); $('#topsearch input')?.focus(); }
+  if ((e.key === '/' && !typing) || (e.key === 'k' && (e.metaKey || e.ctrlKey))) {
+    const box = $('#q') || $('#topsearch input');
+    if (box) { e.preventDefault(); box.focus(); box.select(); } else if (store.get(TOKEN_KEY)) { e.preventDefault(); location.hash = '#/search'; }
+  }
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+playIntro();
+syncOnline();
 route();

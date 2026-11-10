@@ -4,9 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Brain</title>
-  <meta name="description" content="My second brain">
-  <meta name="theme-color" content="#0c0b10" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+  <meta name="description" content="The brain between you and your AI. One memory every agent reads and writes.">
+  <meta name="theme-color" content="#120d0c" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ece4d6" media="(prefers-color-scheme: light)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Brain">
@@ -19,6 +19,8 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <canvas id="field" aria-hidden="true"></canvas>
+  <div id="field-tip" class="field-tip" role="tooltip" hidden></div>
   <div id="app"></div>
   <script type="module" src="/app.js"></script>
 </body>
