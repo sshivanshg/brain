@@ -53,7 +53,25 @@ export async function openDb() {
     db = { kind: 'pglite', query: (sql, params) => lite.query(sql, params), exec: (sql) => lite.exec(sql) };
   }
   await db.exec(SCHEMA);
+  db.vector = await enableVectors(db);
   return db;
+}
+
+// pgvector for semantic search (Postgres only; PGlite keeps full-text search).
+async function enableVectors(db) {
+  if (db.kind !== 'postgres' || process.env.BRAIN_VECTORS === '0') return false;
+  try {
+    await db.exec(`CREATE EXTENSION IF NOT EXISTS vector;
+      ALTER TABLE memories ADD COLUMN IF NOT EXISTS embedding vector(1024);
+      CREATE INDEX IF NOT EXISTS memories_embedding ON memories USING hnsw (embedding vector_cosine_ops);`);
+    return true;
+  } catch (e) {
+    // Concurrent cold starts can race on CREATE EXTENSION; the column existing is what matters.
+    const { rows } = await db.query("SELECT 1 FROM information_schema.columns WHERE table_name = 'memories' AND column_name = 'embedding'").catch(() => ({ rows: [] }));
+    if (rows.length) return true;
+    console.error('[db] pgvector unavailable:', e.message);
+    return false;
+  }
 }
 
 export { ROOT };

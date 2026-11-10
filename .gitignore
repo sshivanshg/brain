@@ -6,3 +6,4 @@ data
 .vercel
 .neon
 .env.local
+functions/web-assets.mjs

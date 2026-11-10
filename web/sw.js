@@ -1,6 +1,6 @@
 // App shell cache so the PWA opens instantly (and offline). API calls always go to the network.
-const CACHE = 'brain-shell-v2';
-const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
+const CACHE = 'brain-shell-v3';
+const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/lib.js', '/intro.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

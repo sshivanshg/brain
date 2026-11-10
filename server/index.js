@@ -13,6 +13,7 @@ import { createOAuth } from './oauth.js';
 import { mountNeon, isOwnerJwt } from './neon.js';
 import { fileURLToPath } from 'node:url';
 import * as cortex from './cortex.js';
+import { embedStatus } from './embed.js';
 import { dayOf, shiftDay, clip } from './util.js';
 
 const PORT = Number(process.env.PORT || 4321);
@@ -75,7 +76,7 @@ const sourceOf = (c, fallback) => c.req.header('x-brain-source') || fallback;
 // Fire-and-forget enrichment when an LLM key is configured.
 function enrich(fn) { if (cortex.cortexEnabled) fn().catch((e) => console.error('[enrich]', e.message)); }
 
-app.get('/api/health', (c) => c.json({ ok: true, db: db.kind, cortex: cortex.cortexEnabled, today: dayOf(), owner: process.env.BRAIN_OWNER || null }));
+app.get('/api/health', (c) => c.json({ ok: true, db: db.kind, cortex: cortex.cortexEnabled, semantic: store.semanticOn() && embedStatus().available, today: dayOf(), owner: process.env.BRAIN_OWNER || null }));
 app.get('/api/stats', async (c) => c.json(await store.stats()));
 app.get('/api/projects', async (c) => c.json(await store.projects()));
 
@@ -163,6 +164,9 @@ app.post('/api/dream', async (c) => {
   if (!cortex.cortexEnabled) return c.json({ error: 'No ANTHROPIC_API_KEY on the server. Run the dream from Claude Code: /mcp__brain__dream' }, 400);
   return c.json(await dreamAll());
 });
+
+app.get('/api/semantic', (c) => c.json({ pgvector: store.semanticOn(), ...embedStatus() }));
+app.post('/api/semantic/backfill', async (c) => c.json(await store.backfillEmbeddings(Number(c.req.query('limit')) || 64)));
 
 app.post('/api/ask', async (c) => {
   const { question } = await c.req.json();

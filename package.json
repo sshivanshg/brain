@@ -19,8 +19,10 @@
     "hooks": "git config core.hooksPath .githooks",
     "check": "node scripts/quality.mjs check",
     "check:design": "node scripts/quality.mjs design",
-    "build": "node scripts/quality.mjs check",
-    "start:neon": "node --env-file=.env.local server/index.js"
+    "build": "node scripts/bundle-web.mjs && node scripts/quality.mjs check",
+    "start:neon": "node --env-file=.env.local server/index.js",
+    "deploy": "node scripts/bundle-web.mjs && neon deploy --env .env.local -y --no-env-pull",
+    "semantic:backfill": "node --env-file=.env.local scripts/backfill.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

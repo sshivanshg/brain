@@ -5,6 +5,7 @@ export default defineConfig({
     realtime: true,
   },
   auth: true,
+  aiGateway: true,
   functions: {
     brain: {
       name: "Brain API + MCP",
