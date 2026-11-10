@@ -15,10 +15,21 @@ export function resolveRoute(path, signedIn) {
   return VIEWS[path] || 'unknown';
 }
 
-export function introMode({ seen, reducedMotion }) {
+// Landing gets the full-screen constellation that flies into the hero; app routes the short ignite.
+export function introMode({ seen, reducedMotion, landing = false }) {
   if (seen) return 'none';
-  return reducedMotion ? 'fade' : 'full';
+  if (reducedMotion) return 'fade';
+  return landing ? 'hero' : 'full';
 }
+
+// One geometry for the hero canvas and the intro, so intro nodes land exactly on hero nodes.
+export const heroNodeCount = (viewportWidth) => (viewportWidth < 700 ? 90 : 160);
+export const BRAIN_SEED = 11;
+export function heroGeometry(w, h) {
+  const s = Math.min(w / 2.15, h / 1.8);
+  return { s, cx: w / 2, cy: h / 2 - s * 0.05 };
+}
+export const brainPoint = (n, g, off = { left: 0, top: 0 }) => ({ x: off.left + g.cx + n.x * g.s, y: off.top + g.cy + n.y * g.s });
 
 export function searchPath(q, kind) {
   let p = '/api/memories?limit=40';

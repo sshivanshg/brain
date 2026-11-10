@@ -1,34 +1,44 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <link rel="stylesheet" href="ui.css">
 </head>
 <body class="popup">
   <header>
-    <div class="brand"><span class="dot"></span>brain</div>
-    <span id="status" class="muted">…</span>
+    <div class="brand"><span class="node" aria-hidden="true"></span>brain</div>
+    <span id="status" class="small muted" role="status">…</span>
   </header>
-  <div class="stats"><div><b id="pages">–</b><span>pages today</span></div><div><b id="mem">–</b><span>memories today</span></div><div><b id="queued">–</b><span>waiting</span></div></div>
 
-  <section>
-    <label class="muted">Save this page</label>
-    <textarea id="note" rows="2" placeholder="Why it matters (optional)"></textarea>
-    <div class="row">
-      <select id="kind"><option>bookmark</option><option>note</option><option>todo</option><option>decision</option><option>lesson</option></select>
-      <button id="save" class="primary">Save</button>
-    </div>
-  </section>
+  <div id="setup" class="setup" hidden>
+    <h2>Not connected</h2>
+    <p>Point this browser at your own Brain server to start remembering what you read.</p>
+    <button id="setupBtn" class="primary">Set up</button>
+  </div>
 
-  <section>
-    <input id="q" placeholder="Search your brain…">
-    <div id="results"></div>
-  </section>
+  <main id="main" hidden>
+    <p id="captureOff" class="notice" hidden>Page capture is off — only manual saves and AI chats. <a id="enableCapture">Turn on</a></p>
+    <div class="stats"><div><b id="pages">–</b><span>pages today</span></div><div><b id="mem">–</b><span>memories today</span></div><div><b id="queued">–</b><span>waiting</span></div></div>
 
-  <footer>
-    <label class="toggle"><input type="checkbox" id="paused"> Pause capture</label>
-    <span><a id="open" href="#">Open brain</a> · <a id="opts" href="#">Settings</a></span>
-  </footer>
+    <section>
+      <label class="label" for="note">Save this page</label>
+      <textarea id="note" rows="2" placeholder="Why it matters (optional)"></textarea>
+      <div class="row">
+        <select id="kind" aria-label="Kind"><option>bookmark</option><option>note</option><option>todo</option><option>decision</option><option>lesson</option></select>
+        <button id="save" class="primary">Save page</button>
+      </div>
+    </section>
+
+    <section>
+      <input id="q" type="search" placeholder="Search your brain…" aria-label="Search your brain">
+      <div id="results"></div>
+    </section>
+
+    <footer>
+      <label class="toggle"><input type="checkbox" id="paused"> Pause capture</label>
+      <span><a id="open">Open Brain</a> · <a id="opts">Settings</a></span>
+    </footer>
+  </main>
   <script src="popup.js"></script>
 </body>
 </html>

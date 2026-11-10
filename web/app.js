@@ -134,12 +134,20 @@ const TABS = ['today', 'ask', 'projects', 'browsing', 'settings'];
 let healthP = null;
 const health = () => (healthP ||= api('/api/health').catch((e) => { healthP = null; throw e; }));
 
+// Forget the token on this device; agents and other devices stay connected.
+function signOut() {
+  if (!confirm('Sign out of Brain on this device? You will need your token to sign back in.')) return;
+  store.set(TOKEN_KEY, null);
+  healthP = null;
+  location.hash = '#/about';
+}
+
 function frame(active, content, { search = true } = {}) {
   app.innerHTML = `<div class="shell">
     <aside class="side">
       <a class="brand" href="#/"><span class="brand-dot"></span>brain</a>
       <nav class="nav">${NAV.map(([k, label, href], i) => `<a href="${href}" class="${k === active ? 'on' : ''}"${k === active ? ' aria-current="page"' : ''}><span class="nav-n">${String(i + 1).padStart(2, '0')}</span>${label}</a>`).join('')}</nav>
-      <div class="side-foot"><a href="#/about">Why brain</a><span id="health"></span></div>
+      <div class="side-foot"><a href="#/about">Why brain</a><button type="button" class="linkish" id="signout">Sign out</button><span id="health"></span></div>
     </aside>
     <main>
       ${search ? `<div class="top">
@@ -151,6 +159,8 @@ function frame(active, content, { search = true } = {}) {
     <nav class="tabbar">${TABS.map((k) => { const [, label, href] = NAV.find((n) => n[0] === k); return `<a href="${href}" class="${k === active ? 'on' : ''}">${icon(k)}${label}</a>`; }).join('')}</nav>
     <a class="fab" href="#/capture" aria-label="Capture">${icon('capture')}</a>
   </div>`;
+  const so = $('#signout');
+  if (so) so.onclick = signOut;
   const ts = $('#topsearch');
   if (ts) ts.onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q=${encodeURIComponent(e.target.q.value)}`; };
   health().then((h) => { const el = $('#health'); if (el) el.textContent = `${h.db} · cortex ${h.cortex ? 'on' : 'off'}`; }).catch(() => {});
@@ -722,7 +732,7 @@ async function viewSettings() {
     document.documentElement.dataset.theme = next;
     store.set('brain.theme', next);
   };
-  $('#out', v).onclick = () => { store.set(TOKEN_KEY, null); healthP = null; location.hash = '#/about'; };
+  $('#out', v).onclick = signOut;
 }
 
 function renderLogin(error) {
@@ -796,6 +806,6 @@ document.addEventListener('keydown', (e) => {
   }
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-playIntro();
+playIntro({ landing: resolveRoute(parseRoute(location.hash).path, !!store.get(TOKEN_KEY)) === 'landing' });
 syncOnline();
 route();

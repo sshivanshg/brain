@@ -141,3 +141,46 @@ test('pull command names the project or falls back to a placeholder', () => {
   assert.equal(pullCommand('brain'), 'brain skills pull -p brain');
   assert.equal(pullCommand(''), 'brain skills pull -p <project>');
 });
+
+test('landing gets the hero morph intro; app routes keep the short one', () => {
+  assert.equal(introMode({ seen: false, reducedMotion: false, landing: true }), 'hero');
+  assert.equal(introMode({ seen: false, reducedMotion: true, landing: true }), 'fade');
+  assert.equal(introMode({ seen: true, reducedMotion: false, landing: true }), 'none');
+  assert.equal(introMode({ seen: false, reducedMotion: false, landing: false }), 'full');
+});
+
+test('intro and hero share one geometry so the morph lands on the hero nodes', async () => {
+  const { heroGeometry, heroNodeCount, brainPoint } = await import('../web/lib.js');
+  const g = heroGeometry(600, 520);
+  assert.equal(g.s, Math.min(600 / 2.15, 520 / 1.8));
+  assert.equal(g.cx, 300);
+  assert.equal(heroNodeCount(390), 90);
+  assert.equal(heroNodeCount(1440), 160);
+  const p = brainPoint({ x: 0.5, y: -0.5 }, g, { left: 100, top: 40 });
+  assert.equal(p.x, 100 + g.cx + 0.5 * g.s);
+  assert.equal(p.y, 40 + g.cy - 0.5 * g.s);
+});
+
+// WCAG contrast of the theme tokens in styles.css.
+const lum = (hex) => {
+  const c = hex.replace('#', '').match(/../g).map((h) => parseInt(h, 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+test('theme tokens keep body text >= 7:1 and accent text >= 4.5:1', async () => {
+  const fs = await import('node:fs');
+  const css = fs.readFileSync(new URL('../web/styles.css', import.meta.url), 'utf8');
+  const light = css.slice(css.indexOf(':root {'), css.indexOf('@media (prefers-color-scheme: dark)'));
+  const dark = css.slice(css.indexOf(':root[data-theme="dark"]'));
+  const tok = (block, name) => block.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`))[1];
+  for (const block of [light, dark]) {
+    const bg = tok(block, '--bg'), surface = tok(block, '--surface');
+    for (const b of [bg, surface]) {
+      assert.ok(ratio(tok(block, '--text'), b) >= 7);
+      assert.ok(ratio(tok(block, '--muted'), b) >= 7);
+      assert.ok(ratio(tok(block, '--accent'), b) >= 4.5);
+    }
+    assert.ok(ratio(tok(block, '--on-accent'), tok(block, '--accent')) >= 4.5);
+  }
+  assert.equal(tok(dark, '--bg'), '#05070a');
+});

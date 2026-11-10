@@ -1,23 +1,48 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Brain settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Brain — connect this browser</title>
   <link rel="stylesheet" href="ui.css">
 </head>
 <body class="options">
-  <div class="brand"><span class="dot"></span>brain</div>
-  <p class="muted">Connect this browser to your brain. Pages count once you've read them for a while or copied something from them; tabs in a tab group named "Claude" or "agent" are logged as your browser agent's work.</p>
-  <label>Brain URL<input id="url" placeholder="http://localhost:4321"></label>
-  <label>Access token<input id="token" type="password" placeholder="brn_…" autocomplete="off"></label>
-  <label>Minimum reading time (seconds)<input id="minDwell" type="number" min="0" max="600"></label>
-  <label>What to capture
-    <select id="mode"><option value="full">Title, URL and readable text (best summaries)</option><option value="titles">Title and URL only</option></select>
-  </label>
-  <label>Never capture these sites (one per line, * wildcards)<textarea id="blocklist" rows="9"></textarea></label>
-  <div class="row"><button id="save" class="primary">Save</button><button id="test">Test connection</button></div>
-  <p id="msg" class="muted"></p>
-  <p class="muted small">Incognito windows are never captured. Your token is stored only in this browser profile.</p>
-  <script src="options.js"></script>
+  <div class="brand"><span class="node" aria-hidden="true"></span>brain</div>
+  <h1 id="title">Connect this browser to <em>your</em> Brain.</h1>
+  <p class="lede">This extension talks only to the Brain server you run. Nothing is sent anywhere else — not to us, not to analytics.</p>
+
+  <section class="step" aria-labelledby="s1">
+    <h2 id="s1"><span class="n">01</span>Your Brain</h2>
+    <p>Paste the address of your Brain and its access token: the <span class="mono">BRAIN_TOKEN</span> your server runs with, or <span class="mono">data/token.txt</span> on a local install.</p>
+    <label>Brain URL<input id="url" type="url" placeholder="https://brain.example.com" autocomplete="url" spellcheck="false"></label>
+    <label>Access token<input id="token" type="password" placeholder="brn_…" autocomplete="off" spellcheck="false"></label>
+    <div class="actions"><button id="test" class="primary">Test connection</button></div>
+    <p id="conn" class="state" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="step" aria-labelledby="s2">
+    <h2 id="s2"><span class="n">02</span>Page capture <span class="small muted" id="capState"></span></h2>
+    <p>To remember what you read, Chrome needs to let Brain see the pages you visit. Here is exactly what happens with that access:</p>
+    <ul class="plain">
+      <li>A page is kept only after ~20 seconds of focused reading, or when you copy from it.</li>
+      <li>Banking, email and password-manager sites below are never read. Incognito is never read.</li>
+      <li>Text goes straight to your Brain URL above. You can pause from the toolbar or revoke here any time.</li>
+    </ul>
+    <div class="actions"><button id="grant" class="primary">Allow page capture</button><button id="revoke" hidden>Turn off page capture</button></div>
+    <p class="small muted">Skip this and Brain still works for saving pages by hand (right-click, Alt+Shift+B) and for ChatGPT, Claude.ai and Gemini.</p>
+  </section>
+
+  <section class="step" aria-labelledby="s3">
+    <h2 id="s3"><span class="n">03</span>What counts</h2>
+    <label>Minimum reading time <span class="hint">Seconds of focused reading before a page is kept.</span><input id="minDwell" type="number" min="0" max="600"></label>
+    <label>What to capture
+      <select id="mode"><option value="full">Title, URL and readable text (best summaries)</option><option value="titles">Title and URL only</option></select>
+    </label>
+    <label>Never capture these sites <span class="hint">One per line. <span class="mono">*</span> is a wildcard; subdomains are included.</span><textarea id="blocklist" rows="10" spellcheck="false"></textarea></label>
+    <div class="actions"><button id="save" class="primary">Save preferences</button><button id="reset">Restore default blocklist</button></div>
+    <p id="msg" class="state" role="status" aria-live="polite"></p>
+  </section>
+  <p class="small muted">Your token is stored only in this browser profile. <a href="https://github.com/sshivanshg/brain/blob/main/docs/privacy.md" target="_blank" rel="noopener">Privacy policy</a></p>
+  <script type="module" src="options.js"></script>
 </body>
 </html>

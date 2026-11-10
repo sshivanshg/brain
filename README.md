@@ -115,9 +115,28 @@ Link it with `npm link` or `ln -s "$PWD/bin/brain.mjs" ~/.local/bin/brain`.
 
 ## Chrome extension
 
-`chrome://extensions` → Developer mode → **Load unpacked** → `extension/`, then enter your brain URL
-and token. Pages count after 20s of focused reading; banking, email and password managers are blocked
-by default; incognito is never captured.
+<img src="docs/screenshots/extension.png" alt="Brain extension setup page" width="560">
+
+Works with any Brain you run (Chrome 116+). Everything goes only to your Brain URL — see the
+[privacy policy](docs/privacy.md).
+
+**Install**
+- **From a release:** download `brain-extension-<version>.zip` from
+  [GitHub Releases](https://github.com/sshivanshg/brain/releases), unzip it, then
+  `chrome://extensions` → Developer mode → **Load unpacked** → the unzipped folder.
+- **From source:** `chrome://extensions` → Developer mode → **Load unpacked** → `extension/`.
+
+**Set up** (the setup page opens on install; later it is the extension's Settings)
+1. Enter your Brain URL (e.g. `https://brain.example.com` or `http://localhost:4321`) and an access token.
+2. **Test connection** — Chrome asks to allow your Brain's address, then the extension checks
+   `/api/health` and your token.
+3. Optionally **Allow page capture**. Pages count after 20s of focused reading or when you copy
+   from them; banking, email and password managers are blocked by default (editable); incognito is
+   never captured; pause any time from the toolbar. Without it, right-click / Alt+Shift+B saves and
+   the ChatGPT / Claude.ai / Gemini 🧠 button still work.
+
+**Package** with `npm run pack:extension` → `dist/brain-extension-<version>.zip` (Web Store listing
+copy: [docs/chrome-web-store.md](docs/chrome-web-store.md)).
 
 ## Self-host
 

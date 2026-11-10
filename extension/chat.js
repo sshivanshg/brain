@@ -18,10 +18,11 @@
   const btn = document.createElement('button');
   btn.textContent = '🧠';
   btn.title = 'Add context from your brain (Alt+B)';
+  btn.setAttribute('aria-label', 'Add context from your brain');
   Object.assign(btn.style, {
-    position: 'fixed', right: '18px', bottom: '96px', zIndex: 2147483647, width: '40px', height: '40px', borderRadius: '12px',
-    border: '1px solid rgba(157,134,255,.5)', background: '#15141b', color: '#fff', fontSize: '18px', cursor: 'pointer', // design-ok: no CSS vars here
-    boxShadow: '0 6px 20px rgba(109,77,255,.35)', // design-ok: host page, no CSS vars
+    position: 'fixed', right: '18px', bottom: '96px', zIndex: 2147483647, width: '44px', height: '44px', borderRadius: '3px',
+    border: '1px solid #3a2c27', background: '#1a1311', color: '#ece4d6', fontSize: '18px', cursor: 'pointer', // design-ok: host page, mirrors --line/--surface/--text (dark)
+    boxShadow: '0 0 0 1px rgba(191,227,106,.35), 0 6px 18px rgba(0,0,0,.35)', // design-ok: host page, --accent ring
   });
   document.documentElement.append(btn);
 

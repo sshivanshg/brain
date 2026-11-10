@@ -3,9 +3,9 @@
 import math, struct, zlib, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-BG = (12, 11, 16)
-ACCENT = (157, 134, 255)
-GLOW = (109, 77, 255)
+BG = (5, 7, 10)
+ACCENT = (63, 208, 255)
+GLOW = (31, 111, 178)
 
 
 def png(size):
@@ -48,8 +48,8 @@ for size in (16, 32, 48, 128):
 
 (ROOT / "web" / "icons" / "icon.svg").write_text(
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-    '<rect width="64" height="64" rx="14" fill="#0c0b10"/>'
-    '<circle cx="32" cy="32" r="25.6" fill="none" stroke="#6d4dff" stroke-opacity=".6" stroke-width="3.2"/>'
-    '<circle cx="32" cy="32" r="19.2" fill="#9d86ff"/></svg>\n'
+    '<rect width="64" height="64" rx="14" fill="#05070a"/>'
+    '<circle cx="32" cy="32" r="25.6" fill="none" stroke="#1f6fb2" stroke-opacity=".6" stroke-width="3.2"/>'
+    '<circle cx="32" cy="32" r="19.2" fill="#3fd0ff"/></svg>\n'
 )
 print("icons written")
