@@ -1,6 +1,6 @@
 // Brain web app — no build step, no framework. Hash routes, one render() per view.
 import { parseRoute, resolveRoute, searchPath, skillsPath, skillPath, skillTitle, pullCommand, mcpUrl, kindGlyph, kindVar, specimenMeta, demoSearch } from './lib.js';
-import { mountBrain } from './brain.js';
+import { mountLanding } from './brain.js';
 import { playIntro } from './intro.js';
 import { mountField } from './field.js';
 
@@ -163,7 +163,12 @@ function frame(active, content, { search = true } = {}) {
   if (so) so.onclick = signOut;
   const ts = $('#topsearch');
   if (ts) ts.onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q=${encodeURIComponent(e.target.q.value)}`; };
-  health().then((h) => { const el = $('#health'); if (el) el.textContent = `${h.db} · cortex ${h.cortex ? 'on' : 'off'}`; }).catch(() => {});
+  health().then((h) => {
+    const el = $('#health');
+    if (el) el.textContent = `${h.db} · cortex ${h.cortex ? 'on' : 'off'}`;
+    const main = $('main');
+    if (h.demo && main && !$('.demo-banner')) main.insertAdjacentHTML('afterbegin', '<p class="demo-banner" role="status">You’re exploring the live demo: a fictional brain with sample data. Add anything you like; it resets daily. <a href="https://github.com/sshivanshg/brain">Run your own</a></p>');
+  }).catch(() => {});
   return $('#view');
 }
 // Skeletons shaped like the content they stand in for.
@@ -304,6 +309,11 @@ const hit = (text, q) => {
   return t.replace(re, '<mark>$1</mark>');
 };
 let heroStop = null;
+// The public demo: fictional data, token "demo", reset daily (server/demo.js).
+const DEMO_URL = 'https://br-shiny-fog-befz8b9p-demo.compute.c-9.us-east-2.aws.neon.tech';
+const demoCta = (cls = 'btn ghost lg') => `<a class="${cls}" href="${DEMO_URL}/#/demo">Try the live demo</a>`;
+const demoNote = '<p class="l-demo-note">Demo token <code>demo</code> · sample data, resets daily</p>';
+
 function viewLanding(signedIn) {
   const mcp = mcpUrl(location.origin);
   const primary = signedIn ? '<a class="btn primary lg" href="#/">Back to your brain</a>' : '<a class="btn primary lg" href="#/login">Open your brain</a>';
@@ -316,9 +326,10 @@ function viewLanding(signedIn) {
         <p class="eyebrow">One memory for every AI you use</p>
         <h1 class="display">The brain between you and your <em>AI</em>.</h1>
         <p class="lede">Claude Code, Cursor, ChatGPT and your browser all read and write one memory that you own. Switch models; what you know stays.</p>
-        <div class="l-ctas">${primary}<a class="btn ghost lg" href="#how" data-jump>How it works</a></div>
+        <div class="l-ctas">${primary}${demoCta()}</div>
+        ${demoNote}
       </div>
-      <div class="l-brain"><canvas id="brain" aria-label="A brain-shaped constellation of memories. Pulses travel between connected nodes; tap a node to fire it." role="img"></canvas></div>
+      <div class="l-brain"><div id="brain" class="l-brain-hit" aria-label="A 3D brain of connected memories. Signals travel between nodes; tap the brain to fire one." role="img"></div></div>
     </section>
     <section class="l-strip" aria-label="Works with"><p>Works with the tools you already use</p><ul>${CLIENTS.map((c) => `<li>${c}</li>`).join('')}</ul></section>
     <section class="l-sec" id="how">
@@ -357,7 +368,7 @@ function viewLanding(signedIn) {
     <footer class="l-final">
       <h2 class="display-sm">Stop re-explaining yourself to <em>every</em> AI.</h2>
       <p class="lede">Self-hosted, private, and yours. Set up in about ten minutes.</p>
-      <div class="l-ctas">${primary}</div>
+      <div class="l-ctas">${primary}${demoCta()}</div>
     </footer>
   </div>`;
   $('#copymcp').onclick = async () => {
@@ -390,7 +401,7 @@ function viewLanding(signedIn) {
     typer = setTimeout(tick, 400);
   }, { threshold: 0.6 });
   io.observe(q);
-  heroStop = mountBrain($('#brain'));
+  heroStop = mountLanding($('#field'), $('#brain'), $('#field-tip'));
   window.scrollTo(0, 0);
 }
 
@@ -759,6 +770,12 @@ function renderLogin(error) {
 // ---------- router ----------
 async function route() {
   const { path } = parseRoute(location.hash);
+  if (path === '/demo') {
+    const h = await fetch('/api/health').then((r) => r.json()).catch(() => ({}));
+    if (h.demo) store.set(TOKEN_KEY, 'demo');
+    location.hash = h.demo ? '#/' : '#/about';
+    return;
+  }
   const signedIn = !!store.get(TOKEN_KEY);
   const view = resolveRoute(path, signedIn);
   if (view !== 'home') setField(null);

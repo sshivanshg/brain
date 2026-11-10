@@ -77,37 +77,6 @@ test('specimen metadata strip reads kind, project, date and id', async () => {
   assert.deepEqual(specimenMeta({ id: 8, kind: 'note' }, 'now'), ['note', 'now', '#8']);
 });
 
-test('brain silhouette contains the cerebrum and excludes the corners', async () => {
-  const { inBrain } = await import('../web/lib.js');
-  assert.equal(inBrain(0, -0.1), true);
-  assert.equal(inBrain(0.55, 0.42), true); // cerebellum
-  assert.equal(inBrain(-0.98, 0.95), false);
-  assert.equal(inBrain(0.98, -0.95), false);
-});
-
-test('brain nodes are deterministic, capped and all inside the silhouette', async () => {
-  const { brainNodes, inBrain } = await import('../web/lib.js');
-  const a = brainNodes(90, 7);
-  assert.deepEqual(a, brainNodes(90, 7));
-  assert.equal(a.length, 90);
-  assert.ok(a.every((n) => inBrain(n.x, n.y)));
-  assert.equal(brainNodes(5000, 1).length, 160);
-});
-
-test('brain links join near neighbours only, each pair once, with a per-node cap', async () => {
-  const { brainNodes, brainLinks } = await import('../web/lib.js');
-  const nodes = brainNodes(80, 3);
-  const links = brainLinks(nodes, { reach: 0.35, perNode: 3 });
-  assert.ok(links.length > 40);
-  const seen = new Set(), deg = new Map();
-  for (const [i, j] of links) {
-    assert.ok(i < j && !seen.has(`${i}-${j}`)); seen.add(`${i}-${j}`);
-    assert.ok(Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y) <= 0.35);
-    deg.set(i, (deg.get(i) || 0) + 1);
-  }
-  assert.ok([...deg.values()].every((d) => d <= 3));
-});
-
 test('landing search demo matches title or body, case-insensitively, and marks hits', async () => {
   const { demoSearch } = await import('../web/lib.js');
   const rows = [{ title: 'Use Neon branches', body: 'per PR' }, { title: 'Tabs', body: 'Prefer two spaces' }];
@@ -142,23 +111,118 @@ test('pull command names the project or falls back to a placeholder', () => {
   assert.equal(pullCommand(''), 'brain skills pull -p <project>');
 });
 
-test('landing gets the hero morph intro; app routes keep the short one', () => {
+test('landing plays the brain intro on every load; app routes keep the short one once per session', () => {
   assert.equal(introMode({ seen: false, reducedMotion: false, landing: true }), 'hero');
   assert.equal(introMode({ seen: false, reducedMotion: true, landing: true }), 'fade');
-  assert.equal(introMode({ seen: true, reducedMotion: false, landing: true }), 'none');
+  assert.equal(introMode({ seen: true, reducedMotion: false, landing: true }), 'hero');
+  assert.equal(introMode({ seen: true, reducedMotion: true, landing: true }), 'fade');
+  assert.equal(introMode({ seen: true, reducedMotion: false, landing: false }), 'none');
   assert.equal(introMode({ seen: false, reducedMotion: false, landing: false }), 'full');
 });
 
-test('intro and hero share one geometry so the morph lands on the hero nodes', async () => {
-  const { heroGeometry, heroNodeCount, brainPoint } = await import('../web/lib.js');
-  const g = heroGeometry(600, 520);
-  assert.equal(g.s, Math.min(600 / 2.15, 520 / 1.8));
-  assert.equal(g.cx, 300);
-  assert.equal(heroNodeCount(390), 90);
-  assert.equal(heroNodeCount(1440), 160);
-  const p = brainPoint({ x: 0.5, y: -0.5 }, g, { left: 100, top: 40 });
-  assert.equal(p.x, 100 + g.cx + 0.5 * g.s);
-  assert.equal(p.y, 40 + g.cy - 0.5 * g.s);
+test('3D brain volume has two hemispheres split by a fissure, a cerebellum, and empty corners', async () => {
+  const { inBrain3 } = await import('../web/lib.js');
+  assert.equal(inBrain3(0, -0.15, 0.33), true); // right hemisphere
+  assert.equal(inBrain3(0, -0.15, -0.33), true); // left hemisphere
+  assert.equal(inBrain3(0, -0.5, 0), false); // longitudinal fissure along the top
+  assert.equal(inBrain3(0.58, 0.4, 0.15), true); // cerebellum
+  assert.equal(inBrain3(0.26, 0.7, 0), true); // stem
+  assert.equal(inBrain3(-0.98, 0.95, 0.9), false);
+  assert.equal(inBrain3(0, 0, 0.95), false);
+});
+
+test('brain cloud is deterministic, capped, inside the volume and dense at the cortex', async () => {
+  const { brainCloud, inBrain3, brainDepth } = await import('../web/lib.js');
+  const a = brainCloud(400, 11);
+  assert.deepEqual(a.pos, brainCloud(400, 11).pos);
+  assert.equal(a.pos.length, 400 * 3);
+  assert.equal(a.size.length, 400);
+  let left = 0, shell = 0;
+  for (let i = 0; i < 400; i++) {
+    const [x, y, z] = a.pos.subarray(i * 3, i * 3 + 3);
+    assert.ok(inBrain3(x, y, z));
+    if (z < 0) left++;
+    if (brainDepth(x, y, z) > 0.8) shell++;
+  }
+  assert.ok(left > 140 && left < 260, `both hemispheres populated (${left} left)`);
+  assert.ok(shell > 260, `cortex-biased (${shell} near the surface)`);
+  assert.equal(brainCloud(5000, 1).size.length, 600);
+});
+
+test('cortex dust lies on the brain surface, traces folds, and is deterministic', async () => {
+  const { brainDust, brainDepth, inBrain3 } = await import('../web/lib.js');
+  const d = brainDust(800, 11);
+  assert.equal(d.length, 800 * 3);
+  assert.deepEqual(d, brainDust(800, 11));
+  for (let i = 0; i < d.length; i += 3) {
+    assert.ok(inBrain3(d[i], d[i + 1], d[i + 2]));
+    assert.ok(brainDepth(d[i], d[i + 1], d[i + 2]) > 0.86);
+  }
+  assert.equal(brainDust(99999, 1).length, 2400 * 3);
+});
+
+test('cloud links come from a spatial grid: near neighbours only, each pair once, degree capped', async () => {
+  const { brainCloud, cloudLinks } = await import('../web/lib.js');
+  const { pos } = brainCloud(300, 11);
+  const links = cloudLinks(pos, { reach: 0.22, perNode: 4 });
+  assert.ok(links.length / 2 > 300, `enough synapses (${links.length / 2})`);
+  const seen = new Set(), deg = new Uint8Array(300);
+  for (let k = 0; k < links.length; k += 2) {
+    const i = links[k], j = links[k + 1];
+    assert.ok(i < j && !seen.has(i * 1000 + j)); seen.add(i * 1000 + j);
+    const d = Math.hypot(pos[i * 3] - pos[j * 3], pos[i * 3 + 1] - pos[j * 3 + 1], pos[i * 3 + 2] - pos[j * 3 + 2]);
+    assert.ok(d <= 0.22);
+    deg[i]++; deg[j]++;
+  }
+  assert.ok(deg.every((d) => d <= 4));
+});
+
+test('activation spreads by hops from the spark; unreachable nodes stay dark', async () => {
+  const { hopDistances } = await import('../web/lib.js');
+  const links = Uint16Array.from([0, 1, 1, 2, 0, 3]); // 0-1-2, 0-3, node 4 isolated
+  assert.deepEqual([...hopDistances(5, links, 0)], [0, 1, 2, 1, -1]);
+  assert.deepEqual([...hopDistances(5, links, 2)], [2, 1, 0, 3, -1]);
+});
+
+test('projection is perspective: origin lands on the view centre, nearer points grow', async () => {
+  const { projectCloud } = await import('../web/lib.js');
+  const out = new Float32Array(3 * 4);
+  projectCloud(Float32Array.from([0, 0, 0, 0, 0, -0.5, 0, 0, 0.5]), out, { cx: 200, cy: 100, s: 50 }, 0, 0);
+  assert.deepEqual([out[0], out[1], out[2]], [200, 100, 1]);
+  assert.ok(out[6] > 1 && out[10] < 1);
+  projectCloud(Float32Array.from([1, 0, 0]), out, { cx: 0, cy: 0, s: 10 }, Math.PI / 2, 0);
+  assert.ok(Math.abs(out[0]) < 1e-6, 'a quarter turn of yaw points +x at the camera axis');
+});
+
+test('intro and hero share node budget, view geometry and resting orientation', async () => {
+  const { cloudBudget, cloudView, heroYaw, HERO_YAW, HERO_SWAY } = await import('../web/lib.js');
+  assert.deepEqual(cloudBudget(390, 3), { nodes: 150, dpr: 1.5 });
+  assert.deepEqual(cloudBudget(1440, 3), { nodes: 520, dpr: 2 });
+  const v = cloudView(600, 520, { left: 100, top: 40 });
+  assert.equal(v.cx, 400);
+  assert.ok(v.s > 0 && v.s * 2.6 <= 600 + 1e-9 && v.s * 1.95 <= 520 + 1e-9, 'the brain fits inside the rect');
+  assert.equal(heroYaw(0), HERO_YAW - HERO_SWAY);
+  assert.ok(Math.abs(heroYaw(0.01) - heroYaw(0)) < 1e-4, 'hero starts at rest so the hand-off has no jolt');
+});
+
+test('intro timeline: spark, grow, name, a long readable flight, done at 3.2s', async () => {
+  const { introPhase, INTRO } = await import('../web/lib.js');
+  assert.equal(INTRO.total, 3200);
+  assert.deepEqual(introPhase(0), { spark: 0, grow: 0, name: 0, land: 0, done: false });
+  assert.equal(introPhase(500).spark, 1);
+  assert.equal(introPhase(950).grow, 0.5);
+  assert.equal(introPhase(1700).name, 0.5);
+  assert.equal(introPhase(2600).land, 0.5, 'the big brain flies into the hero from 2.0s to 3.2s');
+  assert.equal(introPhase(3200).done, true);
+});
+
+test('intro speed is a debug flag: only a valid query param changes it', async () => {
+  const { introSpeed } = await import('../web/lib.js');
+  assert.equal(introSpeed(''), null);
+  assert.equal(introSpeed('?introSpeed=0.25'), 0.25);
+  assert.equal(introSpeed('?introSpeed=abc'), null);
+  assert.equal(introSpeed('?introSpeed=0'), 0.05);
+  assert.equal(introSpeed('?introSpeed=99'), 4);
 });
 
 // WCAG contrast of the theme tokens in styles.css.
@@ -183,4 +247,40 @@ test('theme tokens keep body text >= 7:1 and accent text >= 4.5:1', async () => 
     assert.ok(ratio(tok(block, '--on-accent'), tok(block, '--accent')) >= 4.5);
   }
   assert.equal(tok(dark, '--bg'), '#05070a');
+});
+
+test('landing sample memories span the demo kinds and projects', async () => {
+  const { SAMPLE_MEMORIES, SAMPLE_PROJECTS, kindVar } = await import('../web/lib.js');
+  assert.deepEqual(SAMPLE_PROJECTS, ['atlas-web', 'atlas-api', 'pocket-ml', 'field-notes', 'infra']);
+  assert.ok(SAMPLE_MEMORIES.length >= 40);
+  for (const k of ['decision', 'lesson', 'session', 'browse', 'skill']) assert.ok(SAMPLE_MEMORIES.some((m) => m.kind === k), k);
+  assert.ok(SAMPLE_MEMORIES.every((m) => SAMPLE_PROJECTS.includes(m.project) && m.title && kindVar(m.kind) !== 'note'));
+});
+
+test('landing field covers the whole scroll, in parallax layers, clustered by project', async () => {
+  const { landingField, SAMPLE_MEMORIES } = await import('../web/lib.js');
+  const opts = { width: 1440, height: 900, pageHeight: 4200 };
+  const f = landingField(110, opts);
+  assert.deepEqual(f.x, landingField(110, opts).x);
+  assert.equal(f.n, 110);
+  let top = 0, bottom = 0;
+  for (let i = 0; i < f.n; i++) {
+    assert.ok(f.x[i] >= 0 && f.x[i] <= 1440);
+    assert.ok(f.depth[i] > 0 && f.depth[i] < 1);
+    assert.ok(f.mem[i] < SAMPLE_MEMORIES.length);
+    const maxScroll = 4200 - 900, sy = (s) => f.y[i] - s * f.depth[i]; // screen y at scroll s
+    if (sy(0) >= 0 && sy(0) <= 900) top++;
+    if (sy(maxScroll) >= 0 && sy(maxScroll) <= 900) bottom++;
+  }
+  assert.ok(top >= 12 && bottom >= 12, `visible at the top (${top}) and the bottom (${bottom}) of the page`);
+  const centre = (p) => { let x = 0, c = 0; for (let i = 0; i < f.n; i++) if (SAMPLE_MEMORIES[f.mem[i]].project === p) { x += f.y[i]; c++; } return x / c; };
+  assert.notEqual(Math.round(centre('atlas-web')), Math.round(centre('infra')));
+});
+
+test('the field calms behind text: nodes inside a padded text block are dimmed', async () => {
+  const { calmAt } = await import('../web/lib.js');
+  const rects = Float32Array.from([100, 100, 400, 200]); // left, top, right, bottom
+  assert.equal(calmAt(250, 150, rects, 0), 0.18);
+  assert.equal(calmAt(800, 150, rects, 0), 1);
+  assert.ok(calmAt(250, 150, rects, -300) === 1, 'rects scroll with the page');
 });

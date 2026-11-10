@@ -3,11 +3,12 @@
 //   Neon Auth      → accept Managed Auth JWTs for the owner (NEON_AUTH_* vars)
 //   Realtime       → sealed live query for today's feed (NEON_REALTIME_* vars)
 import { dayOf } from './util.js';
+import { DEMO } from './demo.js';
 
 const BUCKET = process.env.BRAIN_BUCKET || 'assets';
 
 // ---------- object storage ----------
-export const storageEnabled = Boolean(process.env.AWS_ENDPOINT_URL_S3);
+export const storageEnabled = !DEMO && Boolean(process.env.AWS_ENDPOINT_URL_S3);
 let s3;
 async function client() {
   if (s3) return s3;
@@ -31,7 +32,7 @@ export async function listBackups() {
 }
 
 // ---------- Neon Auth ----------
-export const neonAuthEnabled = Boolean(process.env.NEON_AUTH_JWKS_URL && process.env.NEON_AUTH_BASE_URL);
+export const neonAuthEnabled = !DEMO && Boolean(process.env.NEON_AUTH_JWKS_URL && process.env.NEON_AUTH_BASE_URL);
 const OWNERS = (process.env.BRAIN_OWNER_EMAILS || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 let jwks;
 
@@ -49,7 +50,7 @@ export async function isOwnerJwt(token) {
 }
 
 // ---------- Realtime ----------
-export const realtimeEnabled = Boolean((process.env.NEON_REALTIME_SECRET || process.env.BRAIN_REALTIME_SECRET) && (process.env.NEON_REALTIME_URL || process.env.BRAIN_REALTIME_URL));
+export const realtimeEnabled = !DEMO && Boolean((process.env.NEON_REALTIME_SECRET || process.env.BRAIN_REALTIME_SECRET) && (process.env.NEON_REALTIME_URL || process.env.BRAIN_REALTIME_URL));
 let rt;
 async function realtime() {
   if (rt) return rt;

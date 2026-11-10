@@ -15,6 +15,7 @@ import { mountNeon, isOwnerJwt } from './neon.js';
 import { fileURLToPath } from 'node:url';
 import * as cortex from './cortex.js';
 import { embedStatus } from './embed.js';
+import { DEMO } from './demo.js';
 import { dayOf, shiftDay, clip } from './util.js';
 
 const PORT = Number(process.env.PORT || 4321);
@@ -59,6 +60,12 @@ if (process.env.BRAIN_CONNECTOR_URL === '1') {
 
 app.use('/api/*', cors({ origin: '*', allowHeaders: ['Authorization', 'Content-Type', 'X-Brain-Source'], allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'] }));
 app.use('/mcp', cors({ origin: '*', allowHeaders: ['Authorization', 'Content-Type', 'Mcp-Session-Id', 'Mcp-Protocol-Version', 'X-Brain-Source'], exposeHeaders: ['Mcp-Session-Id'] }));
+// Demo: keep writes small; the data resets on every cold start anyway.
+if (DEMO) app.use('*', async (c, next) => {
+  if (Number(c.req.header('content-length') || 0) > 64_000) return c.json({ error: 'The demo accepts up to 64 KB per request.' }, 413);
+  await next();
+});
+
 app.use('*', async (c, next) => {
   const p = c.req.path;
   const open = c.req.method === 'OPTIONS' || p === '/api/health' || !(p.startsWith('/api/') || p === '/mcp');
@@ -77,7 +84,7 @@ const sourceOf = (c, fallback) => c.req.header('x-brain-source') || fallback;
 // Fire-and-forget enrichment when an LLM key is configured.
 function enrich(fn) { if (cortex.cortexEnabled) fn().catch((e) => console.error('[enrich]', e.message)); }
 
-app.get('/api/health', (c) => c.json({ ok: true, db: db.kind, cortex: cortex.cortexEnabled, semantic: store.semanticOn() && embedStatus().available, today: dayOf(), owner: process.env.BRAIN_OWNER || null }));
+app.get('/api/health', (c) => c.json({ ok: true, db: db.kind, cortex: cortex.cortexEnabled, demo: DEMO, semantic: store.semanticOn() && embedStatus().available, today: dayOf(), owner: process.env.BRAIN_OWNER || null }));
 app.get('/api/stats', async (c) => c.json(await store.stats()));
 app.get('/api/projects', async (c) => c.json(await store.projects()));
 
