@@ -20,6 +20,18 @@ export default defineConfig({
         NODE_ENV: "production",
       },
     },
+    // Public demo: fictional data in an in-memory database, reset on every cold start.
+    // It ignores DATABASE_URL and every other service (see server/demo.js).
+    demo: {
+      name: "Brain public demo",
+      source: "./functions/brain.mjs",
+      env: {
+        BRAIN_DEMO: "1",
+        BRAIN_TOKEN: "demo",
+        BRAIN_TZ: "UTC",
+        NODE_ENV: "production",
+      },
+    },
   },
   buckets: {
     // Daily JSON backups of every memory (private; read via the API).

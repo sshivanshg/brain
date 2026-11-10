@@ -1,10 +1,11 @@
 // Morning brief as a web push notification. No LLM: built from yesterday's digest, activity and open threads.
 import webpush from 'web-push';
 import { dayOf, shiftDay, clip } from './util.js';
+import { DEMO } from './demo.js';
 
 const PUB = process.env.VAPID_PUBLIC;
 const PRIV = process.env.VAPID_PRIVATE;
-export const pushEnabled = Boolean(PUB && PRIV);
+export const pushEnabled = !DEMO && Boolean(PUB && PRIV);
 if (pushEnabled) webpush.setVapidDetails('mailto:brain@localhost', PUB, PRIV);
 
 export async function morningText(store) {

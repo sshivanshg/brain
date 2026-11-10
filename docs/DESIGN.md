@@ -56,20 +56,29 @@ hue deepens to `#0057a8` so it passes AA as text.
   kind pigment, never a pill. Map lives in `web/lib.js`.
 - **Radius:** `--radius` 3px (index cards, controls). Circles only for nodes, mic and FAB.
 - **Spacing:** 4px grid — 4, 8, 12, 16, 24, 32, 48. Page gutter 16px on phone.
-- **Neural field:** ≤110 nodes desktop / 48 phone, DPR capped at 2 / 1.5, paused when the
-  tab is hidden, one still frame under reduced motion. Intro ignites it in ≤1.6s, once per
-  session, skippable.
-- **Landing brain:** `web/brain.js` samples ≤160 nodes (90 on phone) inside a brain
-  silhouette (`inBrain`/`brainNodes`/`brainLinks` in `web/lib.js`), links nearest neighbours,
-  sends pulses along synapses, nodes lean away from the cursor and tap fires a node. Ignites
-  like the intro (~1.4s), paused off-screen and in hidden tabs, one still frame under
-  reduced motion. Hot nodes and pulses carry a soft `--signal-glow` halo (a disc, not `shadowBlur`).
-- **Landing intro (`web/intro.js`, mode `hero`):** once per session on the landing, a
-  viewport-filling brain built from the *same* `brainNodes(heroNodeCount, BRAIN_SEED)` set
-  ignites (0–0.9s), the wordmark resolves, then at 1.25s every node flies to its hero node
-  (`heroGeometry` + `brainPoint`) while the page fades in; done at 2.2s. One rAF loop: the hero
-  canvas is held (`intro-run`) until `brain:intro-done`. Click, key, wheel or touch skips.
-  Reduced motion: wordmark crossfade. Signed-in app routes keep the short radial ignite.
+- **Neural field (app home):** ≤110 nodes desktop / 48 phone, DPR capped at 2 / 1.5, paused when the
+  tab is hidden, one still frame under reduced motion. App routes ignite it in ≤1.6s, once per session, skippable.
+- **Landing brain (`web/brain.js`):** a 3D point cloud sampled in a brain volume (`inBrain3`: two
+  hemispheres split by the fissure, frontal/occipital/temporal lobes, cerebellum, stem; `brainCloud`
+  in `web/lib.js`, cortex-biased): 520 nodes desktop / 150 phone, synapses to nearest neighbours via a
+  spatial grid (`cloudLinks`), plus "cortex dust" (`brainDust`, 2400 / 900 1px specks on the surface
+  where a fold pattern runs) so gyri and the silhouette read. Perspective projection (`projectCloud`)
+  with depth-scaled size, alpha and a soft sprite for far nodes (depth of field). Action potentials
+  travel along synapses and cascade a few hops; nodes flare on arrival. Glow is prerendered radial
+  sprites tinted from tokens, additive (`lighter`) in dark and normal blending on paper; never
+  `shadowBlur`. The hero sways slowly (`heroYaw`), tilts toward the cursor and a tap fires a node.
+- **Landing field:** the landing draws the hero brain *and* a calm field of sample memories
+  (`SAMPLE_MEMORIES`, five projects) on the one fixed `#field` canvas in one rAF loop. Nodes are
+  coloured by kind, linked within a project, sit in three parallax layers as you scroll, drop to a
+  whisper behind text blocks (`calmAt`) and around the brain, and show the memory title on hover.
+  It is a backdrop: it never competes with the brain or the copy.
+- **Landing intro (`web/intro.js`, mode `hero`, every landing load):** spark (0–0.5s, HUD ticks and
+  readouts fade in at the edges) → an activation wave grows the network hop by hop from the spark
+  (0.5–1.4s) → a sweep fires front to back while the wordmark resolves (1.4–2.0s) → the big brain
+  shrinks and flies onto the hero rect and pose with motion trails while the page rises in and the
+  overlay dissolves (2.0–3.2s). The intro and the landing share the *same* scene object and
+  projection, so the hand-off has no jump. Click, key, wheel or touch skips; a hidden tab skips.
+  Reduced motion: a 300ms crossfade and a still frame. `?introSpeed=0.25` slows it for frame capture.
 - **Landing structure:** hero (headline, one-line value prop, "Open your brain" + "How it
   works"), works-with strip, 3 steps, live search demo, connect (MCP URL copy), FAQ, final CTA.
 
