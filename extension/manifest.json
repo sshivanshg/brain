@@ -1,32 +1,32 @@
 {
   "manifest_version": 3,
   "name": "Brain",
-  "version": "0.2.0",
-  "description": "Feeds your second brain: what you read, what you copy, and what your browser agent does.",
+  "version": "1.0.0",
+  "description": "Feeds your own self-hosted Brain: pages you actually read, what you copy, and your web AI chats.",
+  "homepage_url": "https://github.com/sshivanshg/brain",
+  "minimum_chrome_version": "116",
   "permissions": [
     "storage",
-    "tabs",
-    "tabGroups",
     "contextMenus",
-    "alarms"
+    "alarms",
+    "activeTab",
+    "scripting",
+    "tabGroups"
   ],
   "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*"
+  ],
+  "optional_host_permissions": [
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "content_scripts": [
-    {
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    },
     {
       "matches": [
         "https://chatgpt.com/*",
@@ -50,7 +50,10 @@
       "128": "icons/icon-128.png"
     }
   },
-  "options_page": "options.html",
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",

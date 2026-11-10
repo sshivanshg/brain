@@ -27,24 +27,25 @@ has an `aria-label`, works with Dynamic Type / browser zoom at 200%.
 Never use a raw colour, radius or shadow outside the token blocks. A literal that appears
 twice belongs in the tokens. One semantic colour per meaning.
 
-| Token | Light (bone paper) | Dark (oxblood ink) | Use |
+| Token | Light (cool paper) | Dark (Jarvis black) | Use |
 |---|---|---|---|
-| `--bg` | `#ece4d6` | `#120d0c` | page |
-| `--surface` / `--surface-2` | `#f4eee3` / `#e2d8c6` | `#1a1311` / `#241a17` | index cards / inset, skeletons |
-| `--line` | `#cbbfa9` | `#3a2c27` | hairlines; `--text` is used for heavy rules |
-| `--text` / `--muted` / `--faint` | `#1a1210` / `#4a3f35` / `#9a8c7a` | `#ece4d6` / `#cbbfae` / `#8a7d6f` | ink scale; body text ≥ 7:1 in both themes (muted 8.1:1 light, 10.7:1 dark) |
-| `--accent` | `#3f5c00` | `#bfe36a` | the one signal colour (softened lime, safe on large areas like the primary button) |
-| `--signal` | `#4f7400` | `#c8ff3d` | pure phosphor, only for small canvas pulses and lit nodes |
-| `--mark` | lime 24% | lime 20% | search-hit highlight |
-| `--danger` | `#a3261b` | `#ff6b55` | destructive, recording |
-| `--field-node` / `--field-line` | ink 55% / 35% | bone 55% / 30% | neural field canvas |
-| `--grain` / `--grain-opacity` | SVG fractal noise / 0.05 | same / 0.03 | barely-there grain, below content (z-index 0) |
-| `--k-*` | per memory kind (pigments) | same | kind glyph + field node colour only |
+| `--bg` | `#eef3f8` | `#05070a` | page |
+| `--surface` / `--surface-2` | `#f8fbfd` / `#e1e9f1` | `#0a0f16` / `#0f1620` | index cards / inset, skeletons |
+| `--line` | `#c3d0dd` | `#1b2836` | hairlines; `--text` is used for heavy rules |
+| `--text` / `--muted` / `--faint` | `#08111c` / `#2f4256` / `#5c6f83` | `#e6eef7` / `#a8b9cb` / `#6d8196` | ink scale; body text ≥ 7:1 (text 17:1 both; muted 9.2:1 light, 10.1:1 dark); faint ≥ 4.5:1, meta only |
+| `--accent` | `#0057a8` | `#3fd0ff` | the one signal colour: holographic cyan-blue (6.4:1 light, 11.2:1 dark as text) |
+| `--signal` / `--signal-glow` | `#0a74c9` / 22% | `#3fd0ff` / 28% | canvas pulses, lit nodes and their halo |
+| `--mark` | blue 20% | cyan 22% | search-hit highlight |
+| `--danger` | `#b3261e` | `#ff6b6b` | destructive, recording |
+| `--field-node` / `--field-line` | navy 60% / deep blue 32% | ice 62% / dim blue 30% | neural field canvas; lines are the secondary, dimmer blue |
+| `--tick` / `--hud-grid` | blue 45% / 6% | cyan 50% / 3.5% | HUD: corner ticks on cards, faint grid behind the hero brain only (never behind body text) |
+| `--grain` / `--grain-opacity` | cool SVG noise / 0.035 | same / 0.025 | barely-there grain, below content (z-index 0) |
+| `--k-*` | per memory kind (cool-led: blue, violet, teal, mint, sky, lavender; rose/amber/gold for lesson/todo/highlight) | same | kind glyph + field node colour only |
 
-**Why acid lime (phosphor):** it reads as a live signal on oxblood ink — an oscilloscope
-trace, not a brand colour — and shares nothing with the violet/blue SaaS default. Orange was
-rejected because it collides with the warm paper and the `decision`/`todo` kind pigments.
-On bone paper the same hue is deepened to `#3f5c00` so it passes AA as text.
+**Why cyan on black ("Jarvis"):** a holographic HUD signal on near-pure black — a live readout,
+not a brand fill. One accent only; lines use a dimmer blue so the cyan stays reserved for
+what is active (pulses, focus rings with a soft glow, the primary action). On cool paper the
+hue deepens to `#0057a8` so it passes AA as text.
 
 - **Type (readability first):** `--sans` Inter for all body, labels, nav, buttons and meta,
   sentence case, 16px/1.6 in the app and 17px on the landing, prose capped at ~68ch.
@@ -62,7 +63,13 @@ On bone paper the same hue is deepened to `#3f5c00` so it passes AA as text.
   silhouette (`inBrain`/`brainNodes`/`brainLinks` in `web/lib.js`), links nearest neighbours,
   sends pulses along synapses, nodes lean away from the cursor and tap fires a node. Ignites
   like the intro (~1.4s), paused off-screen and in hidden tabs, one still frame under
-  reduced motion.
+  reduced motion. Hot nodes and pulses carry a soft `--signal-glow` halo (a disc, not `shadowBlur`).
+- **Landing intro (`web/intro.js`, mode `hero`):** once per session on the landing, a
+  viewport-filling brain built from the *same* `brainNodes(heroNodeCount, BRAIN_SEED)` set
+  ignites (0–0.9s), the wordmark resolves, then at 1.25s every node flies to its hero node
+  (`heroGeometry` + `brainPoint`) while the page fades in; done at 2.2s. One rAF loop: the hero
+  canvas is held (`intro-run`) until `brain:intro-done`. Click, key, wheel or touch skips.
+  Reduced motion: wordmark crossfade. Signed-in app routes keep the short radial ignite.
 - **Landing structure:** hero (headline, one-line value prop, "Open your brain" + "How it
   works"), works-with strip, 3 steps, live search demo, connect (MCP URL copy), FAQ, final CTA.
 

@@ -7,3 +7,4 @@ data
 .neon
 .env.local
 functions/web-assets.mjs
+dist/

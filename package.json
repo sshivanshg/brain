@@ -21,7 +21,8 @@
     "build": "node scripts/bundle-web.mjs && node scripts/quality.mjs check",
     "start:neon": "node --env-file=.env.local server/index.js",
     "deploy": "node scripts/bundle-web.mjs && neon deploy --env .env.local -y --no-env-pull",
-    "semantic:backfill": "node --env-file=.env.local scripts/backfill.mjs"
+    "semantic:backfill": "node --env-file=.env.local scripts/backfill.mjs",
+    "pack:extension": "node scripts/pack-extension.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

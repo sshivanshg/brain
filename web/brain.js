@@ -2,7 +2,7 @@
 // pulses travelling along links, nodes that lean toward the cursor. Ignites like the intro.
 // Sized to its container, DPR-capped, paused off-screen or in a hidden tab,
 // a single still frame under prefers-reduced-motion. Colours come from CSS tokens.
-import { fieldBudget, brainNodes, brainLinks } from './lib.js';
+import { fieldBudget, brainNodes, brainLinks, heroGeometry, heroNodeCount, BRAIN_SEED } from './lib.js';
 
 const IGNITE = 1400;
 const ease = (t) => 1 - (1 - t) ** 3;
@@ -14,12 +14,14 @@ export function mountBrain(canvas) {
   let w = 0, h = 0, s = 1, cx = 0, cy = 0, nodes = [], links = [], adj = [], col = {}, raf = 0, visible = true;
   const ptr = { x: -9999, y: -9999 };
   const pulses = [];
-  const start = performance.now();
+  let start = performance.now();
+  // While the landing intro flies its constellation in, this canvas waits (one rAF loop at a time).
+  let held = document.documentElement.classList.contains('intro-run');
 
   const readTokens = () => {
     const cs = getComputedStyle(document.documentElement);
     const v = (n) => cs.getPropertyValue(n).trim();
-    col = { node: v('--field-node'), line: v('--field-line'), signal: v('--signal') || v('--accent') };
+    col = { node: v('--field-node'), line: v('--field-line'), signal: v('--signal') || v('--accent'), glow: v('--signal-glow') || v('--accent-soft') };
   };
 
   function layout() {
@@ -28,8 +30,8 @@ export function mountBrain(canvas) {
     const budget = fieldBudget({ width: innerWidth, dpr: devicePixelRatio, reducedMotion: reduced });
     canvas.width = Math.round(w * budget.dpr); canvas.height = Math.round(h * budget.dpr);
     ctx.setTransform(budget.dpr, 0, 0, budget.dpr, 0, 0);
-    s = Math.min(w / 2.15, h / 1.8); cx = w / 2; cy = h / 2 - s * 0.05;
-    const unit = brainNodes(innerWidth < 700 ? 90 : 160, 11);
+    ({ s, cx, cy } = heroGeometry(w, h));
+    const unit = brainNodes(heroNodeCount(innerWidth), BRAIN_SEED);
     nodes = unit.map((n, i) => ({ ...n, ax: cx + n.x * s, ay: cy + n.y * s, x: cx, y: cy, ph: i * 1.7, glow: 0, d: Math.random() * 0.3 }));
     links = brainLinks(unit, { reach: 0.32, perNode: 4 });
     adj = nodes.map(() => []);
@@ -95,6 +97,7 @@ export function mountBrain(canvas) {
     }
     for (const n of nodes) {
       const hot = Math.max(n.near, n.glow, 1 - n.p);
+      if (hot > 0.2) { ctx.globalAlpha = hot * 0.5; ctx.fillStyle = col.glow; ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 7 * hot, 0, Math.PI * 2); ctx.fill(); }
       ctx.globalAlpha = Math.min(1, n.p * 0.8 + hot * 0.4);
       ctx.fillStyle = hot > 0.2 ? col.signal : col.node;
       ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 0.8 + hot * 1.8, 0, Math.PI * 2); ctx.fill();
@@ -108,7 +111,7 @@ export function mountBrain(canvas) {
     step(now, dt); draw(now);
     raf = !reduced && visible && !document.hidden ? requestAnimationFrame(frame) : 0;
   };
-  const kick = () => { if (!raf && !document.hidden) { last = performance.now(); raf = requestAnimationFrame(frame); } };
+  const kick = () => { if (!raf && !held && !document.hidden) { last = performance.now(); raf = requestAnimationFrame(frame); } };
 
   const local = (e) => { const r = canvas.getBoundingClientRect(); ptr.x = e.clientX - r.left; ptr.y = e.clientY - r.top; };
   const onMove = (e) => { local(e); kick(); };
@@ -125,6 +128,7 @@ export function mountBrain(canvas) {
     kick();
   };
   const onVis = () => kick();
+  const onIntroDone = () => { held = false; start = performance.now() - IGNITE; kick(); };
   const io = new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) kick(); });
   const ro = new ResizeObserver(() => { layout(); if (reduced) draw(performance.now()); kick(); });
   const themeWatch = new MutationObserver(() => { readTokens(); if (reduced) draw(performance.now()); });
@@ -133,7 +137,9 @@ export function mountBrain(canvas) {
 
   layout();
   step(performance.now(), 0); draw(performance.now());
+  if (held) { start = -Infinity; step(performance.now(), 0); draw(performance.now()); }
   if (!reduced) kick();
+  addEventListener('brain:intro-done', onIntroDone);
   canvas.addEventListener('pointermove', onMove, { passive: true });
   canvas.addEventListener('pointerleave', onLeave);
   canvas.addEventListener('pointerdown', onDown, { passive: true });
@@ -147,6 +153,7 @@ export function mountBrain(canvas) {
     canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerleave', onLeave);
     canvas.removeEventListener('pointerdown', onDown);
     document.removeEventListener('visibilitychange', onVis);
+    removeEventListener('brain:intro-done', onIntroDone);
     io.disconnect(); ro.disconnect(); themeWatch.disconnect(); scheme.removeEventListener?.('change', onScheme);
   };
 }
