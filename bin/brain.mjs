@@ -8,6 +8,9 @@
 //   brain handoff <note>      leave a note the next agent session in this project will see
 //   brain dream               consolidate past days now (runs Claude Code headless)
 //   brain open [id]           open the web app (or a memory)
+//   brain skills [-p project] list skills · brain skill <name> print one
+//   brain skill add <file|dir|url> [-p project]   save SKILL.md(s) to the brain
+//   brain skills pull [-p project]   write skills into ./.claude/skills/<name>/SKILL.md
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -114,12 +117,49 @@ try {
       const r = spawnSync('claude', ['-p', '/mcp__brain__dream', '--allowedTools', 'mcp__brain__dream,mcp__brain__save_digest,mcp__brain__remember,mcp__brain__update_profile,mcp__brain__brief,mcp__brain__recall'], { stdio: 'inherit', env: { ...process.env, BRAIN_DISABLE: '1' } });
       process.exit(r.status ?? 0);
     }
+    case 'skills': {
+      const proj = f.project || project();
+      const rows = await api(`/api/skills${proj ? `?project=${encodeURIComponent(proj)}` : ''}`);
+      if (f._[0] === 'pull') {
+        const root = path.join(process.cwd(), '.claude', 'skills');
+        for (const r of rows) {
+          const s = await api(`/api/skills/${encodeURIComponent(r.name)}${proj ? `?project=${encodeURIComponent(proj)}` : ''}`);
+          fs.mkdirSync(path.join(root, r.name), { recursive: true });
+          fs.writeFileSync(path.join(root, r.name, 'SKILL.md'), s.body);
+        }
+        console.log(`wrote ${rows.length} skill(s) to ${path.relative(process.cwd(), root) || root}`);
+        break;
+      }
+      if (!rows.length) { console.log(dim('No skills yet. Add one: brain skill add ./SKILL.md')); break; }
+      for (const r of rows) console.log(`${bold(r.name)} ${dim(r.project || 'global')}  ${r.description || ''}`);
+      break;
+    }
+    case 'skill': {
+      if (f._[0] === 'add') {
+        const src = f._[1];
+        if (!src) throw new Error('usage: brain skill add <file|dir|url> [-p project]');
+        const files = /^https?:/.test(src) ? [null]
+          : fs.statSync(src).isDirectory()
+            ? fs.readdirSync(src, { recursive: true }).filter((x) => /(^|\/)SKILL\.md$/i.test(x)).map((x) => path.join(src, x))
+            : [src];
+        for (const file of files) {
+          const body = file ? { content: fs.readFileSync(file, 'utf8'), name: /SKILL\.md$/i.test(file) ? path.basename(path.dirname(path.resolve(file))) : undefined } : { url: src };
+          const m = await api('/api/skills', { method: 'POST', body: { ...body, project: f.project } });
+          console.log(`saved ${bold(m.title)} ${dim(m.project || 'global')} #${m.id}`);
+        }
+        break;
+      }
+      const proj = f.project || project();
+      const s = await api(`/api/skills/${encodeURIComponent(text)}${proj ? `?project=${encodeURIComponent(proj)}` : ''}`);
+      console.log(s.body);
+      break;
+    }
     case 'open': {
       spawnSync('open', [`${URL_}/${text ? `#/m/${text}` : ''}`]);
       break;
     }
     default:
-      console.log(fs.readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 11).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
+      console.log(fs.readFileSync(new URL(import.meta.url), 'utf8').split('\n').slice(1, 13).map((l) => l.replace(/^\/\/ ?/, '')).join('\n'));
   }
 } catch (err) {
   console.error(err.message);

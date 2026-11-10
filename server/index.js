@@ -7,7 +7,8 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { openDb, ROOT } from './db.js';
 import { createStore } from './store.js';
-import { mountMcp } from './mcp.js';
+import { mountMcp, addTools } from './mcp.js';
+import { createSkills, mountSkills, skillTools } from './skills.js';
 import { mountPush } from './push.js';
 import { createOAuth } from './oauth.js';
 import { mountNeon, isOwnerJwt } from './neon.js';
@@ -186,6 +187,9 @@ app.get('/share', (c) => {
   return c.redirect(`/#/capture?${u.searchParams.toString()}`);
 });
 
+const skills = createSkills(store);
+mountSkills(app, skills);
+addTools(skillTools(skills));
 mountMcp(app, store);
 mountPush(app, store);
 mountNeon(app, store);

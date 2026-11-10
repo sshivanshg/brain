@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/sshivanshg/brain/security/advisories/new
+    about: Report privately, please don't open a public issue.
+  - name: Questions & ideas
+    url: https://github.com/sshivanshg/brain/discussions
+    about: Ask and discuss in GitHub Discussions.

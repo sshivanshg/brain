@@ -1,5 +1,5 @@
 // Pure helpers shared by the web app and its tests. No DOM access here.
-const VIEWS = { '/': 'home', '/search': 'home', '/ask': 'ask', '/projects': 'projects', '/browsing': 'browsing', '/library': 'library', '/capture': 'capture', '/settings': 'settings', '/about': 'landing', '/login': 'home' };
+const VIEWS = { '/': 'home', '/search': 'home', '/ask': 'ask', '/projects': 'projects', '/browsing': 'browsing', '/library': 'library', '/skills': 'skills', '/capture': 'capture', '/settings': 'settings', '/about': 'landing', '/login': 'home' };
 
 export function parseRoute(hash) {
   const [p, q = ''] = String(hash || '').replace(/^#/, '').split('?');
@@ -11,6 +11,7 @@ export function resolveRoute(path, signedIn) {
   if (!signedIn) return path === '/login' ? 'login' : 'landing';
   if (path.startsWith('/m/')) return 'memory';
   if (path.startsWith('/project/')) return 'project';
+  if (path.startsWith('/skills/')) return 'skill';
   return VIEWS[path] || 'unknown';
 }
 
@@ -65,3 +66,66 @@ export function clusterLayout(memories, { width, height, max = 120 }) {
 export function specimenMeta(m, when) {
   return [m.kind, m.project, when, `#${m.id}`].filter(Boolean);
 }
+
+// Brain silhouette (side view, facing left) in unit space x,y ∈ [-1, 1]:
+// cerebrum + temporal lobe + cerebellum + brainstem, as a union of simple shapes.
+const inEllipse = (x, y, cx, cy, rx, ry) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1;
+export function inBrain(x, y) {
+  // lateral sulcus: a thin empty groove so the lobes read
+  const t = Math.max(0, Math.min(1, (x + 0.42) / 0.8)), gx = -0.42 + t * 0.8, gy = 0.14 - t * 0.2;
+  if (x > -0.42 && x < 0.38 && Math.hypot(x - gx, y - gy) < 0.035) return false;
+  return inEllipse(x, y, 0, -0.15, 0.92, 0.55)
+    || inEllipse(x, y, -0.18, 0.22, 0.6, 0.3)
+    || inEllipse(x, y, 0.55, 0.36, 0.3, 0.2)
+    || (x >= 0.18 && x <= 0.34 && y >= 0.3 && y <= 0.86);
+}
+
+// Deterministic rejection sampling inside the silhouette; capped so phones stay cheap.
+export function brainNodes(count, seed = 1) {
+  const n = Math.min(count, 160), out = [];
+  for (let k = 0; out.length < n && k < n * 40; k++) {
+    const x = rand(seed * 7919 + k * 2) * 2 - 1, y = rand(seed * 7919 + k * 2 + 1) * 2 - 1;
+    if (inBrain(x, y)) out.push({ x, y, r: 0.6 + rand(k + seed + 0.71) * 1.4 });
+  }
+  return out;
+}
+
+// Synapses: each node links to its nearest neighbours within reach, at most perNode each.
+export function brainLinks(nodes, { reach = 0.3, perNode = 3 } = {}) {
+  const deg = new Array(nodes.length).fill(0), links = [];
+  const pairs = [];
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+      if (d <= reach) pairs.push([d, i, j]);
+    }
+  }
+  pairs.sort((a, b) => a[0] - b[0]);
+  for (const [, i, j] of pairs) {
+    if (deg[i] >= perNode || deg[j] >= perNode) continue;
+    deg[i]++; deg[j]++; links.push([i, j]);
+  }
+  return links;
+}
+
+// Landing search demo: plain substring match over title and body.
+export function demoSearch(rows, q) {
+  const s = String(q || '').trim().toLowerCase();
+  if (!s) return rows;
+  return rows.filter((r) => `${r.title} ${r.body}`.toLowerCase().includes(s));
+}
+
+// Skills: API paths, a display title for uploads (frontmatter name, heading, file name), CLI hint.
+const withProject = (p, project) => (project ? `${p}?project=${encodeURIComponent(project)}` : p);
+export const skillsPath = (project) => withProject('/api/skills', project);
+export const skillPath = (name, project) => withProject(`/api/skills/${encodeURIComponent(name)}`, project);
+export function skillTitle(md, fileName = '') {
+  const s = String(md || '');
+  const fm = s.match(/^---\n([\s\S]*?)\n---/);
+  const name = fm && fm[1].match(/^name:\s*["']?(.+?)["']?\s*$/m);
+  if (name) return name[1];
+  const h = s.match(/^#\s+(.+)$/m);
+  if (h) return h[1].trim();
+  return String(fileName || '').replace(/\.(md|markdown)$/i, '');
+}
+export const pullCommand = (project) => `brain skills pull -p ${project || '<project>'}`;

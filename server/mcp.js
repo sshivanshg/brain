@@ -7,6 +7,7 @@ const INSTRUCTIONS = `This is the user's second brain — the single long-term m
 - At the start of work on a project, call \`brief\` with the project name.
 - Before asking the user something they may have told an agent before, call \`recall\`.
 - Call \`remember\` the moment something durable happens: a decision (with the why), a lesson from a mistake or correction, a preference about how they like things done, a todo/open thread, or a fact about them or their projects. Keep each memory short and self-contained, and set \`project\`.
+- The user keeps skills (SKILL.md playbooks) here: call \`skills\` for the project and load relevant ones with \`skill\` before building.
 - Never store secrets; the server redacts them anyway.`;
 
 const DREAM_PROMPT = `Consolidate my brain ("dream"). Use the brain MCP tools:
@@ -192,6 +193,9 @@ async function handle(msg, store, ctx) {
       return id === undefined ? null : fail(id, -32601, `Method not found: ${method}`);
   }
 }
+
+// Extra tools contributed by other modules (e.g. skills).
+export function addTools(list) { TOOLS.push(...list); }
 
 export function mountMcp(app, store) {
   app.get('/mcp', (c) => c.body(null, 405, { Allow: 'POST' }));
