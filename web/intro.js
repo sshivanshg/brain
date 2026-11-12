@@ -66,13 +66,13 @@ function ignite(canvas) {
 //     projection) takes over without a jump.
 const GROW_ZOOM = 1.22; // camera starts close and dollies out
 const NAME_ZOOM = 0.94;
-const SPIN = 1.35; // radians of yaw shed on the way to the hero pose
+const SPIN = 0.6; // radians of yaw shed on the way to the hero pose
 const START_PITCH = -0.06;
 const ARC = 0.05; // the flight bows upward by this share of the viewport height
 const REVEAL_AT = 0.3; // share of the flight after which the page rises in
 const FLARE = 0.8;
 const PHONE_FIT = 2.2; // on a portrait phone the brain spans nearly the full width
-const TRAIL = 0.42; // share of the previous frame wiped while flying
+const TRAIL = 0.8; // share of the previous frame wiped while flying
 const FLIGHT_SPARKS = 8; // nodes that fire as the brain takes off
 const SECONDARY = 0.2; // chance a newly reached node fires an action potential of its own
 const HUD_EVERY = 4; // frames between readout updates
@@ -97,8 +97,10 @@ function cinema(el, speed, onLand, onDone) {
   const seed = nearestNode(sc, -0.05, -0.12, 0.12), at = activationOrder(sc, seed), lit = new Uint8Array(sc.n);
   const full = phone ? { cx: W / 2, cy: H * 0.42, s: Math.min(W / PHONE_FIT, H / PHONE_FIT) } : cloudView(W, H * 0.86, { left: 0, top: H * 0.02 });
   const bg = el.querySelector('.intro-bg'), hud = { nodes: el.querySelector('[data-hud=nodes]'), links: el.querySelector('[data-hud=links]'), pose: el.querySelector('[data-hud=pose]'), t: el.querySelector('[data-hud=t]') };
-  let hero = null, act = 'spark', frames = 0, raf = 0, prev = 0;
-  const t0 = performance.now();
+  let hero = null, act = 'spark', frames = 0, raf = 0, prev = 0, clock = 0;
+  // The intro clock advances only with drawn frames, and at most one frame-budget per frame:
+  // if the page is busy loading, the animation waits instead of silently skipping ahead.
+  const MAX_STEP = 1000 / 30;
 
   const camera = (ms, ph) => {
     const u = Math.min(1, ms / INTRO.total);
@@ -167,8 +169,10 @@ function cinema(el, speed, onLand, onDone) {
   };
 
   const frame = (now) => {
-    const ms = (now - t0) * speed, dt = Math.min(0.05, ((now - (prev || now)) / 1000) * speed);
+    const step = Math.min(MAX_STEP, prev ? now - prev : 0) * speed;
     prev = now;
+    clock += step;
+    const ms = clock, dt = step / 1000;
     const ph = introPhase(ms);
     if (act === 'spark' && ph.grow > 0) { act = 'grow'; fireNode(sc, seed, 4, 2); }
     if (act === 'grow' && ph.name > 0) { act = 'name'; el.classList.add('name'); }
