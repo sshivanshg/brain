@@ -1,5 +1,5 @@
 // Brain web app — no build step, no framework. Hash routes, one render() per view.
-import { parseRoute, resolveRoute, searchPath, skillsPath, skillPath, skillTitle, pullCommand, mcpUrl, kindGlyph, kindVar, specimenMeta, demoSearch } from './lib.js';
+import { parseRoute, resolveRoute, searchPath, skillsPath, skillPath, skillTitle, pullCommand, mcpUrl, kindGlyph, kindVar, demoSearch } from './lib.js';
 import { mountLanding } from './brain.js';
 import { playIntro } from './intro.js';
 import { mountField } from './field.js';
@@ -40,6 +40,7 @@ function ago(ts) {
   if (s < 86400 * 7) return `${Math.floor(s / 86400)}d`;
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
+const activeAgo = (ts) => { const a = ago(ts); return a === 'now' ? 'just now' : /\d[mhd]$/.test(a) ? `${a} ago` : a; };
 const mins = (sec) => (sec >= 60 ? `${Math.round(sec / 60)} min` : `${sec}s`);
 
 function toast(msg) {
@@ -47,8 +48,16 @@ function toast(msg) {
   t.className = 'toast';
   t.textContent = msg;
   document.body.append(t);
-  setTimeout(() => t.remove(), 2200);
+  t.setAttribute('role', 'status');
+  setTimeout(() => t.remove(), 2600);
 }
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+// Wrap a button action: disable while it runs, say what went wrong if it fails.
+const act = (fn) => async (e) => {
+  const b = e.currentTarget;
+  b.disabled = true;
+  try { await fn(); } catch (x) { if (x.message !== 'unauthorized') toast(`That didn’t go through: ${x.message}`); } finally { b.disabled = false; }
+};
 
 // Small, safe markdown: escape first, then format.
 function md(src) {
@@ -83,9 +92,8 @@ function md(src) {
 
 function card(m) {
   const text = m.snippet ? md(m.snippet.replace(/\n+/g, ' ')) : esc(m.summary || (m.body || '').replace(/[#*`>]/g, '').slice(0, 400));
-  const [, ...rest] = specimenMeta(m, ago(m.created_at));
   return `<a class="mem" href="#/m/${m.id}">
-    <div class="mem-top">${kindTag(m.kind)}${rest.map((x) => `<span>${esc(x)}</span>`).join('')}${m.source ? `<span>${esc(m.source)}</span>` : ''}${m.pinned ? '<span class="pin">◉ pinned</span>' : ''}${m.meta?.dwell ? `<span>${mins(m.meta.dwell)} read</span>` : ''}</div>
+    <div class="mem-top">${kindTag(m.kind)}${m.project ? `<span class="clip">${esc(m.project)}</span>` : ''}<span>${esc(ago(m.created_at))}</span>${m.meta?.dwell ? `<span>${mins(m.meta.dwell)} read</span>` : ''}${m.pinned ? '<span class="pin" title="Pinned to briefings">◉<span class="sr"> pinned</span></span>' : ''}</div>
     <div class="mem-title">${esc(m.title)}</div>
     <div class="mem-body">${text}</div>
     ${m.url ? `<div class="mem-url">${esc(domain(m.url))}</div>` : ''}
@@ -106,11 +114,11 @@ function setField(opts) {
 }
 // Home: start ambient and faint, then swap in real memories when they arrive.
 async function memoryField() {
-  setField({ intensity: 0.35 });
+  setField({ intensity: 0.25 });
   const mine = fieldSeq;
   try {
     const rows = await api('/api/memories?limit=120');
-    if (mine === fieldSeq && rows.length) setField({ memories: rows, intensity: 0.55 });
+    if (mine === fieldSeq && rows.length) setField({ memories: rows, intensity: 0.4 });
   } catch {}
 }
 
@@ -126,10 +134,17 @@ const ICON = {
   capture: '<path d="M12 5v14M5 12h14"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  more: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
+  prev: '<path d="m14 6-6 6 6 6"/>',
+  next: '<path d="m10 6 6 6-6 6"/>',
+  about: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  out: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h9"/>',
 };
 const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[n]}</svg>`;
 const NAV = [['today', 'Home', '#/'], ['ask', 'Ask', '#/ask'], ['projects', 'Projects', '#/projects'], ['browsing', 'Browsing', '#/browsing'], ['library', 'Library', '#/library'], ['skills', 'Skills', '#/skills'], ['capture', 'Capture', '#/capture'], ['settings', 'Settings', '#/settings']];
-const TABS = ['today', 'ask', 'projects', 'browsing', 'settings'];
+// Phone: two tabs either side of Capture; every other screen lives in the More sheet.
+const TABS = ['today', 'ask', 'projects'];
+const navItem = (k) => NAV.find((n) => n[0] === k);
 
 let healthP = null;
 const health = () => (healthP ||= api('/api/health').catch((e) => { healthP = null; throw e; }));
@@ -142,39 +157,64 @@ function signOut() {
   location.hash = '#/about';
 }
 
+const session = {
+  get(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { sessionStorage.setItem(k, v); } catch {} },
+};
 function frame(active, content, { search = true } = {}) {
+  const cur = (k) => (k === active ? ' aria-current="page"' : '');
+  const tab = (k) => { const [, label, href] = navItem(k); return `<a href="${href}" class="${k === active ? 'on' : ''}"${cur(k)}>${icon(k)}${label}</a>`; };
+  const more = NAV.filter(([k]) => k !== 'capture' && !TABS.includes(k));
+  const inMore = more.some(([k]) => k === active);
   app.innerHTML = `<div class="shell">
     <aside class="side">
       <a class="brand" href="#/"><span class="brand-dot"></span>brain</a>
-      <nav class="nav">${NAV.map(([k, label, href], i) => `<a href="${href}" class="${k === active ? 'on' : ''}"${k === active ? ' aria-current="page"' : ''}><span class="nav-n">${String(i + 1).padStart(2, '0')}</span>${label}</a>`).join('')}</nav>
-      <div class="side-foot"><a href="#/about">Why brain</a><button type="button" class="linkish" id="signout">Sign out</button><span id="health"></span></div>
+      <a class="btn primary" href="#/capture">${icon('capture')}Capture</a>
+      <nav class="nav" aria-label="Main">${NAV.filter(([k]) => k !== 'capture').map(([k, label, href]) => `<a href="${href}" class="${k === active ? 'on' : ''}"${cur(k)}>${icon(k)}${label}</a>`).join('')}</nav>
+      <div class="side-foot"><a href="#/about">Why brain</a><button type="button" class="side-link" id="signout">Sign out</button><span id="health"></span></div>
     </aside>
     <main>
       ${search ? `<div class="top">
-        <form class="searchbox" id="topsearch" role="search">${icon('search')}<input name="q" aria-label="Search your brain" placeholder="Ask your mind…" autocomplete="off"><kbd>/</kbd></form>
-        <a class="btn primary" href="#/capture">+ Capture</a>
+        <form class="searchbox" id="topsearch" role="search">${icon('search')}<input name="q" type="search" aria-label="Search your brain" placeholder="Search your brain" autocomplete="off"><kbd>/</kbd></form>
       </div>` : ''}
       <div id="view">${content}</div>
     </main>
-    <nav class="tabbar">${TABS.map((k) => { const [, label, href] = NAV.find((n) => n[0] === k); return `<a href="${href}" class="${k === active ? 'on' : ''}">${icon(k)}${label}</a>`; }).join('')}</nav>
-    <a class="fab" href="#/capture" aria-label="Capture">${icon('capture')}</a>
+    <nav class="tabbar" aria-label="Main">
+      ${TABS.slice(0, 2).map(tab).join('')}
+      <a href="#/capture" class="tab-cap${active === 'capture' ? ' on' : ''}" aria-label="Capture"${cur('capture')}><i>${icon('capture')}</i></a>
+      ${TABS.slice(2).map(tab).join('')}
+      <button type="button" id="morebtn" class="${inMore ? 'on' : ''}" aria-haspopup="dialog">${icon('more')}More</button>
+    </nav>
+    <dialog class="sheet" id="more" aria-label="More">
+      <div class="sheet-grab" aria-hidden="true"></div>
+      ${more.map(([k, label, href]) => `<a href="${href}" class="${k === active ? 'on' : ''}"${cur(k)}>${icon(k)}${label}</a>`).join('')}
+      <hr>
+      <a href="#/about" class="quiet">${icon('about')}Why brain</a>
+      <button type="button" class="quiet" id="signout2">${icon('out')}Sign out</button>
+    </dialog>
   </div>`;
-  const so = $('#signout');
-  if (so) so.onclick = signOut;
+  $('#signout').onclick = signOut;
+  const sheet = $('#more');
+  $('#morebtn').onclick = () => sheet.showModal();
+  // Tapping the backdrop or any destination closes the sheet (a link to the current route fires no hashchange).
+  sheet.onclick = (e) => { if (e.target === sheet || e.target.closest('a')) sheet.close(); };
+  $('#signout2').onclick = () => { sheet.close(); signOut(); };
   const ts = $('#topsearch');
   if (ts) ts.onsubmit = (e) => { e.preventDefault(); location.hash = `#/search?q=${encodeURIComponent(e.target.q.value)}`; };
   health().then((h) => {
     const el = $('#health');
     if (el) el.textContent = `${h.db} · cortex ${h.cortex ? 'on' : 'off'}`;
     const main = $('main');
-    if (h.demo && main && !$('.demo-banner')) main.insertAdjacentHTML('afterbegin', '<p class="demo-banner" role="status">You’re exploring the live demo: a fictional brain with sample data. Add anything you like; it resets daily. <a href="https://github.com/sshivanshg/brain">Run your own</a></p>');
+    if (h.demo && main && !$('.demo-banner') && !session.get('brain.demo.hide')) {
+      main.insertAdjacentHTML('afterbegin', '<p class="demo-banner" role="status"><span>Live demo with sample data. It resets daily. <a href="https://github.com/sshivanshg/brain">Run your own</a></span><button type="button" aria-label="Hide this notice">×</button></p>');
+      $('.demo-banner button').onclick = () => { session.set('brain.demo.hide', '1'); $('.demo-banner')?.remove(); };
+    }
   }).catch(() => {});
   return $('#view');
 }
 // Skeletons shaped like the content they stand in for.
 const skelCards = (n = 3) => `<div class="stream" aria-busy="true" aria-label="Loading">${'<div class="mem skel"><i></i><i></i><i></i></div>'.repeat(n)}</div>`;
 const loading = (active) => frame(active, `<div class="skel-h"></div>${skelCards(4)}`);
-const fig = (n, label, extra = '') => `<p class="fig"><span>FIG. ${String(n).padStart(2, '0')} — ${esc(label)}</span>${extra ? `<span>${extra}</span>` : ''}</p>`;
 function params() { return parseRoute(location.hash).params; }
 function failState(err, retryLabel = 'Try again') {
   return `<div class="empty fail" role="alert"><p>${esc(err.message === 'Failed to fetch' ? 'Couldn’t reach your brain. Check the connection.' : err.message)}</p><button class="btn" data-retry>${retryLabel}</button></div>`;
@@ -183,6 +223,7 @@ function bindRetry(el, fn) { el.querySelectorAll('[data-retry]').forEach((b) => 
 
 // ---------- home: search first, today below ----------
 const SEARCH_KINDS = ['all', 'decision', 'lesson', 'preference', 'todo', 'session', 'note', 'browse', 'digest', 'skill'];
+const KIND_LABEL = { all: 'All', browse: 'Reading' };
 async function viewHome() {
   const p = params();
   let q = p.get('q') || '';
@@ -191,14 +232,17 @@ async function viewHome() {
   const greet = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const v = frame('today', `
     <section class="home-search">
-      <p class="fig"><span>FIG. 01 — RECALL</span><span id="statline">${esc(niceDay(today()).toUpperCase())}</span></p>
-      <p class="greet" id="greet">${greet}.</p>
+      <header class="home-head">
+        <h1 id="greet">${greet}.</h1>
+        <p class="sub" id="statline">${esc(niceDay(today()))}</p>
+      </header>
       <form class="bigsearch" id="bigsearch" role="search">
-        <input id="q" name="q" type="search" enterkeyhint="search" aria-label="Search your brain" placeholder="Ask your mind…" autocomplete="off" value="${esc(q)}">
+        ${icon('search')}
+        <input id="q" name="q" type="search" enterkeyhint="search" aria-label="Search your brain" placeholder="Search your brain" autocomplete="off" value="${esc(q)}">
         <span class="badge" id="sem" hidden title="Results match meaning, not just words">semantic</span>
         <kbd>/</kbd>
       </form>
-      <div class="chips" role="group" aria-label="Filter by kind">${SEARCH_KINDS.map((k) => `<button type="button" data-k="${k}" aria-pressed="${k === kind}" class="${k === kind ? 'on' : ''}">${k}</button>`).join('')}</div>
+      <div class="chips" role="group" aria-label="Filter by kind">${SEARCH_KINDS.map((k) => `<button type="button" data-k="${k}" aria-pressed="${k === kind}" class="${k === kind ? 'on' : ''}">${KIND_LABEL[k] || `${cap(k)}s`}</button>`).join('')}</div>
     </section>
     <section id="results" aria-live="polite"></section>
     <section id="today-feed">${skelCards(3)}</section>`, { search: false });
@@ -215,7 +259,7 @@ async function viewHome() {
     try {
       const rows = await api(searchPath(q, kind));
       if (my !== seq) return;
-      results.innerHTML = `<h2>${q ? `Specimens for “${esc(q)}”` : `All ${esc(kind)}s`} <span class="count">${rows.length}</span></h2>
+      results.innerHTML = `<h2>${q ? `Results for “${esc(q)}”` : esc(KIND_LABEL[kind] || `${cap(kind)}s`)} <span class="count">${rows.length}</span></h2>
         ${rows.length ? stream(rows) : `<div class="empty"><p>Nothing ${q ? `matches “${esc(q)}”` : 'of that kind yet'}.</p><div class="actions center"><a class="btn" href="#/ask">Ask instead</a><a class="btn" href="#/capture${q ? `?text=${encodeURIComponent(q)}` : ''}">Capture it</a></div></div>`}`;
     } catch (err) {
       if (my !== seq || err.message === 'unauthorized') return;
@@ -252,7 +296,7 @@ async function loadFeed(el) {
       api('/api/stats'), api(`/api/memories?day=${t}&limit=60&status=any`), api(`/api/digest?day=${shift(t, -1)}`),
     ]);
     const line = $('#statline');
-    if (line) line.textContent = `${niceDay(t)} · ${stats.total.toLocaleString()} memories · ${stats.projects} projects`.toUpperCase();
+    if (line) line.textContent = `${niceDay(t)} · ${stats.total.toLocaleString()} memories · ${stats.projects} projects`;
     const heat = new Map(stats.heat.map((h) => [h.day, h.count]));
     const max = Math.max(1, ...stats.heat.map((h) => h.count));
     const start = shift(t, -(7 * 17 - 1) - new Date(`${t}T12:00:00`).getDay());
@@ -271,9 +315,12 @@ async function loadFeed(el) {
         <div class="tile"><b>${stats.pages_today}</b><span>pages read</span></div>
         <div class="tile"><b>${stats.knowledge}</b><span>decisions & lessons</span></div>
       </div>
-      <h2>Activity <span class="count">17 wk</span></h2>
-      <div class="heat-wrap"><div class="heat">${cells.join('')}</div><div class="heat-legend"><span>17 weeks</span><span>${stats.bySource.slice(0, 4).map((s) => `${esc(s.source)} ${s.count}`).join(' · ')}</span></div></div>
-      ${digest ? `<h2>Yesterday, digested</h2><div class="card digest md">${md(digest.body)}</div>` : ''}
+      <h2>Activity <span class="count">17 weeks</span></h2>
+      <div class="card heat-card">
+        <div class="heat-wrap"><div class="heat" role="img" aria-label="Memories captured per day over the last 17 weeks">${cells.join('')}</div></div>
+        <ul class="src" aria-label="Where memories came from">${stats.bySource.slice(0, 4).map((s) => `<li><span>${esc(s.source)}</span><b>${s.count.toLocaleString()}</b></li>`).join('')}</ul>
+      </div>
+      ${digest ? `<h2>Yesterday, digested</h2><div class="card md">${md(digest.body)}</div>` : ''}
       <h2>Agents & notes today <span class="count">${agents.length}</span></h2>
       ${agents.length ? stream(agents) : '<div class="empty"><p>Quiet so far. Sessions from Claude Code and anything you capture land here.</p><div class="actions center"><a class="btn primary" href="#/capture">Capture a thought</a></div></div>'}
       <h2>Reading today <span class="count">${pages.length}</span></h2>
@@ -406,31 +453,43 @@ function viewLanding(signedIn) {
 }
 
 const chatLog = [];
+const ASK_STARTERS = ['What did I decide this week?', 'Which lessons should I not repeat?', 'What am I in the middle of?'];
 async function viewAsk() {
   const v = frame('ask', '');
-  const draw = () => {
-    v.innerHTML = `<h1>Ask your <em>brain</em></h1>
-      <p class="sub">Questions are answered from your own memories, with sources.</p>
-      <div class="chat">${chatLog.map((m) => (m.q ? `<div class="bubble q">${esc(m.q)}</div>` : `<div class="bubble a">${m.pending ? 'Thinking…' : m.html}</div>`)).join('')}</div>
-      <form id="askf" class="row"><input class="field" name="q" placeholder="What did I decide about payouts? What was that article on Neon branching?" autocomplete="off"><button class="btn primary" style="flex:none">Ask</button></form>`;
-    $('#askf', v).onsubmit = async (e) => {
+  const ask = async (question) => {
+    chatLog.push({ q: question });
+    const slot = { pending: true };
+    chatLog.push(slot);
+    draw();
+    try {
+      const r = await api('/api/ask', { method: 'POST', body: { question } });
+      slot.html = `${r.answer ? `<div class="md">${md(r.answer)}</div>` : `<p class="hint">${r.cortex ? 'Nothing in your memories answers that yet.' : 'Written answers need ANTHROPIC_API_KEY on the server. Closest memories:'}</p>`}
+        ${r.sources.length ? `<h2>Sources <span class="count">${Math.min(r.sources.length, r.answer ? 6 : 10)}</span></h2>${stream(r.sources.slice(0, r.answer ? 6 : 10))}` : ''}`;
+    } catch (err) {
+      if (err.message === 'unauthorized') return;
+      slot.html = `<p class="err" role="alert">${esc(err.message === 'Failed to fetch' ? 'Couldn’t reach your brain. Check the connection and ask again.' : err.message)}</p>`;
+    }
+    slot.pending = false;
+    if (!v.isConnected) return;
+    draw();
+  };
+  function draw() {
+    v.innerHTML = `<div class="ask"><h1>Ask your <em>brain</em></h1>
+      <p class="sub">Answers come from your own memories, with sources.</p>
+      ${chatLog.length
+        ? `<div class="chat" aria-live="polite">${chatLog.map((m) => (m.q ? `<div class="bubble q">${esc(m.q)}</div>` : m.pending ? '<div class="bubble a skel" aria-busy="true" aria-label="Searching your memories"><i></i><i></i><i></i></div>' : `<div class="bubble a">${m.html}</div>`)).join('')}</div>`
+        : `<div class="suggest">${ASK_STARTERS.map((s) => `<button type="button" class="btn" data-ask="${esc(s)}">${esc(s)}</button>`).join('')}</div>`}
+      <form id="askf" class="composer"><input name="q" aria-label="Your question" placeholder="Ask about anything you’ve saved" autocomplete="off" enterkeyhint="send"><button class="btn primary">Ask</button></form></div>`;
+    $('#askf', v).onsubmit = (e) => {
       e.preventDefault();
       const question = e.target.q.value.trim();
-      if (!question) return;
-      chatLog.push({ q: question });
-      const slot = { pending: true };
-      chatLog.push(slot);
-      draw();
-      try {
-        const r = await api('/api/ask', { method: 'POST', body: { question } });
-        slot.html = `${r.answer ? `<div class="md">${md(r.answer)}</div>` : `<p class="sub" style="margin:0 0 10px">${r.cortex ? 'No answer found.' : 'Add ANTHROPIC_API_KEY on the server for written answers. Closest memories:'}</p>`}
-          ${r.sources.length ? `<h2 style="margin-top:18px">Sources</h2>${stream(r.sources.slice(0, r.answer ? 6 : 10))}` : ''}`;
-      } catch (err) { slot.html = esc(err.message); }
-      slot.pending = false;
-      draw();
+      if (question) ask(question);
     };
-    $('#askf input', v).focus();
-  };
+    v.querySelectorAll('[data-ask]').forEach((b) => { b.onclick = () => ask(b.dataset.ask); });
+    // Don't pop the keyboard over the page on touch devices.
+    if (matchMedia('(pointer: fine)').matches) $('#askf input', v).focus();
+    if (chatLog.length) $('.chat', v).lastElementChild.scrollIntoView({ block: 'nearest' });
+  }
   draw();
 }
 
@@ -438,14 +497,13 @@ async function viewProjects() {
   const v = loading('projects');
   const rows = await api('/api/projects');
   v.innerHTML = `<h1>Projects</h1><p class="sub">Everything your agents have learned, per project.</p>
-    <div class="actions"><a class="btn sm" href="#/skills">${icon('skills')}Skills your agents load</a></div>
-    ${rows.length ? `<div class="grid">${rows.map((p) => `<a class="proj" href="#/project/${encodeURIComponent(p.project)}"><h3>${esc(p.project)}</h3><p>${p.count} memories · ${p.sessions} sessions · ${p.knowledge} decisions/lessons</p><p>active ${ago(p.last_active)} ago</p></a>`).join('')}</div>` : '<div class="empty">No projects yet.</div>'}`;
+    ${rows.length ? `<div class="grid">${rows.map((p) => `<a class="proj" href="#/project/${encodeURIComponent(p.project)}"><h3>${esc(p.project)}</h3><p>${p.count} memories · ${p.sessions} sessions</p><p>${p.knowledge} decisions and lessons</p><p class="when">Active ${activeAgo(p.last_active)}</p></a>`).join('')}</div>` : '<div class="empty"><p>No projects yet. They appear when an agent saves its first memory with a project name.</p><div class="actions center"><a class="btn" href="#/settings">Connect an agent</a></div></div>'}`;
 }
 
 async function viewProject(name) {
   const v = loading('projects');
   const [brief, rows] = await Promise.all([api(`/api/brief?project=${encodeURIComponent(name)}`), api(`/api/memories?project=${encodeURIComponent(name)}&limit=50`)]);
-  v.innerHTML = `<h1>${esc(name)}</h1><p class="sub">This is the briefing every agent gets when it opens this project.</p>
+  v.innerHTML = `<p class="back"><a href="#/projects">← Projects</a></p><h1>${esc(name)}</h1><p class="sub">The briefing every agent gets when it opens this project.</p>
     <div class="card md">${md(brief.replace(/^# .*\n/, ''))}</div>
     <h2>Timeline <span class="count">${rows.length}</span></h2>${stream(rows)}`;
 }
@@ -456,10 +514,10 @@ async function viewBrowsing() {
   const [rows, d] = await Promise.all([api(`/api/memories?kind=browse&day=${day}&limit=200&status=any`), api(`/api/digest?day=${day}`)]);
   const total = rows.reduce((s, r) => s + (r.meta?.dwell || 0), 0);
   const agentPages = rows.filter((r) => r.source === 'chrome-agent').length;
-  v.innerHTML = `<div class="daybar"><a class="btn sm" href="#/browsing?day=${shift(day, -1)}">←</a><b>${niceDay(day)}</b>${day < today() ? `<a class="btn sm" href="#/browsing?day=${shift(day, 1)}">→</a>` : ''}</div>
-    <p class="sub">${rows.length} pages · ${mins(total)} reading${agentPages ? ` · ${agentPages} by your browser agent` : ''}</p>
-    ${d.digest ? `<div class="card digest md">${md(d.digest.body)}</div><h2>Raw pages (compacted)</h2>` : ''}
-    ${stream(rows.sort((a, b) => (b.meta?.dwell || 0) - (a.meta?.dwell || 0)), 'Nothing read this day.')}`;
+  v.innerHTML = `<div class="daybar"><h1 class="h-sm">${niceDay(day)}</h1><a class="btn icon" href="#/browsing?day=${shift(day, -1)}" aria-label="Previous day">${icon('prev')}</a>${day < today() ? `<a class="btn icon" href="#/browsing?day=${shift(day, 1)}" aria-label="Next day">${icon('next')}</a>` : ''}</div>
+    <p class="sub">${rows.length} ${rows.length === 1 ? 'page' : 'pages'} · ${mins(total)} reading${agentPages ? ` · ${agentPages} by your browser agent` : ''}</p>
+    ${d.digest ? `<div class="card md">${md(d.digest.body)}</div><h2>Pages <span class="count">${rows.length}</span></h2>` : ''}
+    ${stream(rows.sort((a, b) => (b.meta?.dwell || 0) - (a.meta?.dwell || 0)), '<p>Nothing read this day. The Chrome extension saves pages as you read them.</p>')}`;
 }
 
 const LIB = ['skill', 'agent', 'prompt', 'playbook', 'doc'];
@@ -467,9 +525,9 @@ async function viewLibrary() {
   const kind = params().get('kind') || 'skill';
   const v = loading('library');
   const rows = await api(`/api/memories?kind=${kind}&limit=200`);
-  v.innerHTML = `<h1>Library</h1><p class="sub">Your skills, agents, prompts and playbooks — synced from agent-hub. Manage skills your agents load in <a class="inline" href="#/skills">Skills</a>.</p>
-    <div class="chips">${LIB.map((k) => `<button data-k="${k}" class="${k === kind ? 'on' : ''}">${k}s</button>`).join('')}</div>
-    ${rows.length ? `<div class="grid">${rows.map((m) => `<a class="proj" href="#/m/${m.id}"><h3 style="font-size:20px">${esc(m.title)}</h3><p>${esc((m.summary || m.body || '').replace(/[#*`>-]/g, '').slice(0, 140))}</p>${m.project ? `<p style="margin-top:8px"><span class="chip">${esc(m.project)}</span></p>` : ''}</a>`).join('')}</div>` : '<div class="empty">Run <code>npm run import</code> to pull in agent-hub.</div>'}`;
+  v.innerHTML = `<h1>Library</h1><p class="sub">Skills, agents, prompts and playbooks synced from agent-hub. Manage what your agents load in <a class="inline" href="#/skills">Skills</a>.</p>
+    <div class="chips" role="group" aria-label="Library section">${LIB.map((k) => `<button type="button" data-k="${k}" aria-pressed="${k === kind}" class="${k === kind ? 'on' : ''}">${cap(k)}s</button>`).join('')}</div>
+    ${rows.length ? `<div class="grid">${rows.map((m) => `<a class="proj" href="#/m/${m.id}"><h3>${esc(m.title)}</h3><p>${esc((m.summary || m.body || '').replace(/[#*`>-]/g, '').slice(0, 140))}</p>${m.project ? `<p class="when">${esc(m.project)}</p>` : ''}</a>`).join('')}</div>` : `<div class="empty"><p>No ${esc(kind)}s here yet. Run <code>npm run import</code> to pull in agent-hub.</p></div>`}`;
   v.querySelectorAll('.chips button').forEach((b) => { b.onclick = () => { location.hash = `#/library?kind=${b.dataset.k}`; }; });
 }
 
@@ -631,61 +689,84 @@ async function viewSkill(name) {
 async function viewMemory(id) {
   const v = loading('');
   const m = await api(`/api/memories/${id}`);
-  v.innerHTML = `<div class="detail-head">${kindTag(m.kind)}${m.project ? `<a class="chip" href="#/project/${encodeURIComponent(m.project)}">${esc(m.project)}</a>` : ''}<span>${esc(m.source)}</span><span>${niceDay(m.day)}</span>${m.meta?.dwell ? `<span>${mins(m.meta.dwell)} read · ${m.meta.visits} visit${m.meta.visits > 1 ? 's' : ''}</span>` : ''}<span>#${m.id}</span></div>
-    <h1 style="font-size:clamp(28px,4vw,38px)">${esc(m.title)}</h1>
-    ${m.url ? `<p><a class="md" href="${esc(m.url)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(m.url)}</a></p>` : ''}
-    ${m.summary && m.summary !== m.body ? `<div class="card" style="margin:14px 0"><div class="sub" style="margin:0">${esc(m.summary)}</div></div>` : ''}
-    ${m.meta?.highlights?.length ? `<h2>Highlights</h2><div class="card md">${m.meta.highlights.map((h) => `<blockquote>${esc(h)}</blockquote>`).join('')}</div>` : ''}
+  const archived = m.status === 'archived';
+  v.innerHTML = `<p class="back"><a href="#/" data-back>← Back</a></p>
+    <div class="detail-head">${kindTag(m.kind)}${m.project ? `<a class="chip" href="#/project/${encodeURIComponent(m.project)}">${esc(m.project)}</a>` : ''}<span>${esc(m.source)}</span><span>${niceDay(m.day)}</span>${m.meta?.dwell ? `<span>${mins(m.meta.dwell)} read · ${m.meta.visits} visit${m.meta.visits > 1 ? 's' : ''}</span>` : ''}<span>#${m.id}</span>${m.pinned ? '<span class="pin">◉ pinned</span>' : ''}</div>
+    <h1 class="h-sm">${esc(m.title)}</h1>
+    ${m.url ? `<p><a class="link" href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.url)}</a></p>` : ''}
     <div class="actions">
       <button class="btn sm" id="copy">Copy</button>
       <button class="btn sm" id="pin">${m.pinned ? 'Unpin' : 'Pin to briefings'}</button>
       <button class="btn sm" id="edit">Edit</button>
-      <button class="btn sm ghost" id="arch">${m.status === 'archived' ? 'Restore' : 'Archive'}</button>
+      <button class="btn sm ghost push" id="arch">${archived ? 'Restore' : 'Archive'}</button>
     </div>
+    ${m.summary && m.summary !== m.body ? `<h2>Summary</h2><div class="card">${esc(m.summary)}</div>` : ''}
+    ${m.meta?.highlights?.length ? `<h2>Highlights</h2><div class="card md">${m.meta.highlights.map((h) => `<blockquote>${esc(h)}</blockquote>`).join('')}</div>` : ''}
+    ${m.summary && m.summary !== m.body ? '<h2>Full text</h2>' : ''}
     <div class="card md" id="body">${md(m.body)}</div>`;
-  $('#copy', v).onclick = async () => { await navigator.clipboard.writeText(m.body); toast('Copied'); };
-  $('#pin', v).onclick = async () => { await api(`/api/memories/${id}`, { method: 'PATCH', body: { pinned: !m.pinned } }); viewMemory(id); };
-  $('#arch', v).onclick = async () => { await api(`/api/memories/${id}`, { method: 'PATCH', body: { status: m.status === 'archived' ? 'active' : 'archived' } }); toast('Done'); history.back(); };
+  $('[data-back]', v).onclick = (e) => { if (history.length > 1) { e.preventDefault(); history.back(); } };
+  const patch = (body) => api(`/api/memories/${id}`, { method: 'PATCH', body });
+  $('#copy', v).onclick = async () => { try { await navigator.clipboard.writeText(m.body); toast('Copied'); } catch { toast('Select the text and copy it'); } };
+  $('#pin', v).onclick = act(async () => { await patch({ pinned: !m.pinned }); toast(m.pinned ? 'Unpinned' : 'Pinned to briefings'); await viewMemory(id); });
+  $('#arch', v).onclick = act(async () => { await patch({ status: archived ? 'active' : 'archived' }); toast(archived ? 'Restored' : 'Archived'); history.back(); });
   $('#edit', v).onclick = () => {
-    $('#body', v).outerHTML = `<form id="ef"><input class="field" name="title" value="${esc(m.title)}"><div class="row"><select class="field" name="kind">${['note', 'decision', 'lesson', 'preference', 'todo', 'fact', 'profile', m.kind].filter((k, i, a) => a.indexOf(k) === i).map((k) => `<option ${k === m.kind ? 'selected' : ''}>${k}</option>`).join('')}</select><input class="field" name="project" placeholder="project" value="${esc(m.project || '')}"></div><textarea class="big" name="body" style="margin-top:10px">${esc(m.body)}</textarea><div class="row"><button class="btn primary" style="flex:none">Save</button></div></form>`;
-    $('#ef', v).onsubmit = async (e) => {
+    $('.actions', v).hidden = true;
+    $('#body', v).outerHTML = `<form id="ef"><label class="sr" for="etitle">Title</label><input class="field" id="etitle" name="title" value="${esc(m.title)}"><div class="row"><select class="field" name="kind" aria-label="Kind">${['note', 'decision', 'lesson', 'preference', 'todo', 'fact', 'profile', m.kind].filter((k, i, a) => a.indexOf(k) === i).map((k) => `<option ${k === m.kind ? 'selected' : ''}>${k}</option>`).join('')}</select><input class="field" name="project" aria-label="Project" placeholder="Project" value="${esc(m.project || '')}"></div><div class="row"><textarea class="big" name="body" aria-label="Memory text">${esc(m.body)}</textarea></div><div class="actions"><button class="btn primary">Save changes</button><button type="button" class="btn" id="ecancel">Cancel</button></div></form>`;
+    const f = $('#ef', v);
+    $('#ecancel', v).onclick = () => viewMemory(id);
+    f.onsubmit = async (e) => {
       e.preventDefault();
-      const f = e.target;
-      await api(`/api/memories/${id}`, { method: 'PATCH', body: { title: f.title.value, kind: f.kind.value, project: f.project.value || null, body: f.body.value } });
-      toast('Saved');
-      viewMemory(id);
+      const save = f.querySelector('.btn.primary');
+      save.disabled = true;
+      try {
+        await patch({ title: f.title.value, kind: f.kind.value, project: f.project.value || null, body: f.body.value });
+        toast('Saved');
+        viewMemory(id);
+      } catch (x) { save.disabled = false; if (x.message !== 'unauthorized') toast(`Couldn’t save: ${x.message}`); }
     };
   };
 }
 
 async function viewCapture() {
   const p = params();
-  const projects = await api('/api/projects').catch(() => []);
   const v = frame('capture', `<h1>Capture</h1><p class="sub">A thought, a link, a decision. Type it or say it.</p>
     <form id="cf">
-      <textarea class="big" name="text" placeholder="What’s on your mind?">${esc([p.get('title'), p.get('text'), p.get('url')].filter(Boolean).join('\n'))}</textarea>
+      <label class="sr" for="ctext">What to remember</label>
+      <textarea class="big" id="ctext" name="text" placeholder="What’s on your mind?">${esc([p.get('title'), p.get('text'), p.get('url')].filter(Boolean).join('\n'))}</textarea>
       <div class="row">
-        <button type="button" class="mic" id="mic" title="Dictate">${icon('mic')}</button>
-        <select class="field" name="kind">${['note', 'decision', 'lesson', 'preference', 'todo', 'fact', 'bookmark', 'voice'].map((k) => `<option>${k}</option>`).join('')}</select>
-        <input class="field" name="project" list="projlist" placeholder="project (optional)">
-        <datalist id="projlist">${projects.map((x) => `<option value="${esc(x.project)}">`).join('')}</datalist>
+        <select class="field" name="kind" aria-label="Kind">${['note', 'decision', 'lesson', 'preference', 'todo', 'fact', 'bookmark', 'voice'].map((k) => `<option value="${k}">${cap(k)}</option>`).join('')}</select>
+        <input class="field" name="project" list="projlist" aria-label="Project" placeholder="Project (optional)" autocomplete="off">
+        <datalist id="projlist"></datalist>
       </div>
-      <div class="row"><button class="btn primary">Save to brain</button></div>
-    </form>`);
-  const f = $('#cf', v);
+      <div class="capture-bar">
+        <button type="button" class="mic" id="mic" aria-label="Dictate" aria-pressed="false">${icon('mic')}</button>
+        <button class="btn primary" id="csave">Save to brain</button>
+      </div>
+      <p class="err" id="cerr" role="alert" hidden></p>
+    </form>`, { search: false });
+  const f = $('#cf', v), err = $('#cerr', v), save = $('#csave', v);
+  api('/api/projects').then((rows) => { const dl = $('#projlist', v); if (dl) dl.innerHTML = rows.map((x) => `<option value="${esc(x.project)}">`).join(''); }).catch(() => {});
   f.text.focus();
   f.onsubmit = async (e) => {
     e.preventDefault();
     const text = f.text.value.trim();
-    if (!text) return;
+    if (!text) { err.textContent = 'Write or say something first.'; err.hidden = false; f.text.focus(); return; }
     const url = (text.match(/https?:\/\/\S+/) || [])[0];
-    const m = await api('/api/capture', { method: 'POST', body: { text, kind: f.kind.value, project: f.project.value || undefined, url, source: matchMedia('(max-width: 860px)').matches ? 'phone' : 'web' } });
-    toast('Saved');
-    location.hash = `#/m/${m.id}`;
+    save.disabled = true; save.textContent = 'Saving…'; err.hidden = true;
+    try {
+      const m = await api('/api/capture', { method: 'POST', body: { text, kind: f.kind.value, project: f.project.value || undefined, url, source: matchMedia('(max-width: 860px)').matches ? 'phone' : 'web' } });
+      toast('Saved to your brain');
+      location.hash = `#/m/${m.id}`;
+    } catch (x) {
+      if (x.message === 'unauthorized') return;
+      save.disabled = false; save.textContent = 'Save to brain';
+      err.textContent = `Not saved: ${x.message === 'Failed to fetch' ? 'couldn’t reach your brain. Your text is still here; try again.' : x.message}`;
+      err.hidden = false;
+    }
   };
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const mic = $('#mic', v);
-  if (!SR) { mic.style.display = 'none'; return; }
+  if (!SR) { mic.hidden = true; return; }
   let rec = null;
   mic.onclick = () => {
     if (rec) { rec.stop(); return; }
@@ -693,10 +774,13 @@ async function viewCapture() {
     rec.continuous = true;
     rec.interimResults = true;
     const base = f.text.value ? `${f.text.value.trim()} ` : '';
+    const stop = () => { mic.classList.remove('live'); mic.setAttribute('aria-pressed', 'false'); rec = null; };
     rec.onresult = (e) => { f.text.value = base + Array.from(e.results).map((r) => r[0].transcript).join(''); };
-    rec.onend = () => { mic.classList.remove('live'); rec = null; if (f.kind.value === 'note') f.kind.value = 'voice'; };
+    rec.onerror = (e) => { stop(); if (e.error === 'not-allowed' || e.error === 'service-not-allowed') toast('Microphone is blocked. Allow it in your browser settings to dictate.'); };
+    rec.onend = () => { if (!rec) return; stop(); if (f.kind.value === 'note') f.kind.value = 'voice'; };
     rec.start();
     mic.classList.add('live');
+    mic.setAttribute('aria-pressed', 'true');
   };
 }
 
@@ -704,26 +788,48 @@ async function viewSettings() {
   const origin = location.origin;
   const v = frame('settings', '');
   const h = await health();
-  v.innerHTML = `<h1>Settings</h1><p class="sub">Database: ${h.db} · Cortex (server-side AI): ${h.cortex ? 'on' : 'off — summaries are extractive; run /mcp__brain__dream from Claude Code'}</p>
+  const code = (label, text) => `<div class="code-h"><span>${label}</span>${copyBtn(text)}</div><pre>${esc(text)}</pre>`;
+  const theme = store.get('brain.theme') || 'system';
+  v.innerHTML = `<h1>Settings</h1>
+    <p class="sub">${esc(h.db)} database · written answers ${h.cortex ? 'on' : 'off'}${h.cortex ? '' : '. Summaries are extractive until the server has an ANTHROPIC_API_KEY; meanwhile run <code>/mcp__brain__dream</code> from Claude Code.'}</p>
+    <h2>Appearance</h2>
+    <div class="card"><div class="set-row"><div><b>Theme</b><p>Follows your device unless you pick one.</p></div>
+      <div class="seg" role="group" aria-label="Theme">${['system', 'light', 'dark'].map((t) => `<button type="button" data-theme-set="${t}" aria-pressed="${t === theme}">${cap(t)}</button>`).join('')}</div></div></div>
     <h2>Connect an agent</h2>
     <div class="card snippet">
-      <p class="sub" style="margin:0">Claude Code (every project):</p>
-      <pre>claude mcp add --scope user --transport http brain ${esc(origin)}/mcp --header "Authorization: Bearer YOUR_TOKEN"</pre>
-      <p class="sub" style="margin:0">Cursor / Windsurf / any MCP client:</p>
-      <pre>{ "mcpServers": { "brain": { "url": "${esc(origin)}/mcp", "headers": { "Authorization": "Bearer YOUR_TOKEN" } } } }</pre>
-      <p class="sub" style="margin:0">Or wire everything on a machine at once: <code>npm run connect -- --url ${esc(origin)}</code></p>
+      ${code('Claude Code, every project', `claude mcp add --scope user --transport http brain ${origin}/mcp --header "Authorization: Bearer YOUR_TOKEN"`)}
+      ${code('Cursor, Windsurf or any MCP client', `{ "mcpServers": { "brain": { "url": "${origin}/mcp", "headers": { "Authorization": "Bearer YOUR_TOKEN" } } } }`)}
+      ${code('Everything on this machine at once', `npm run connect -- --url ${origin}`)}
+      <p class="hint">Swap <code>YOUR_TOKEN</code> for your access token before running.</p>
     </div>
     <h2>Capture from your phone</h2>
-    <div class="card snippet"><p class="sub" style="margin:0">Add this page to your home screen (Share → Add to Home Screen). For an iOS Shortcut, POST JSON <code>{"text": "…"}</code> to:</p><pre>${esc(origin)}/api/capture   (header Authorization: Bearer YOUR_TOKEN)</pre></div>
-    <h2>Your data</h2>
-    <div class="actions"><button class="btn" id="exp">Export everything (JSON)</button><button class="btn" id="push">Enable morning brief</button><button class="btn" id="theme">Toggle theme</button><button class="btn ghost" id="out">Sign out on this device</button></div>`;
-  $('#exp', v).onclick = async () => {
+    <div class="card snippet">
+      <p>Add this page to your home screen: Share, then Add to Home Screen. For an iOS Shortcut, POST JSON <code>{"text": "…"}</code> with your token as a Bearer header.</p>
+      ${code('Capture endpoint', `${origin}/api/capture`)}
+    </div>
+    <h2>Notifications and data</h2>
+    <div class="card">
+      <div class="set-row"><div><b>Morning brief</b><p>One push each morning with what matters today.</p></div><button class="btn sm" id="push">Turn on</button></div>
+      <div class="set-row"><div><b>Export</b><p>Everything in your brain as one JSON file.</p></div><button class="btn sm" id="exp">Export</button></div>
+      <div class="set-row"><div><b>Sign out</b><p>Forgets the token on this device. Agents and other devices stay connected.</p></div><button class="btn sm" id="out">Sign out</button></div>
+    </div>`;
+  bindCopy(v);
+  v.querySelectorAll('[data-theme-set]').forEach((b) => {
+    b.onclick = () => {
+      const t = b.dataset.themeSet;
+      if (t === 'system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+      store.set('brain.theme', t === 'system' ? null : t);
+      v.querySelectorAll('[data-theme-set]').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    };
+  });
+  $('#exp', v).onclick = act(async () => {
     const data = await api('/api/export');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
     a.download = `brain-export-${today()}.json`;
     a.click();
-  };
+    toast('Export downloaded');
+  });
   $('#push', v).onclick = async () => {
     try {
       const { key } = await api('/api/push/key');
@@ -737,12 +843,6 @@ async function viewSettings() {
       toast('Morning brief on — test sent');
     } catch (err) { toast(`Couldn’t enable: ${err.message}`); }
   };
-  $('#theme', v).onclick = () => {
-    const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    const next = cur === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    store.set('brain.theme', next);
-  };
   $('#out', v).onclick = signOut;
 }
 
@@ -750,14 +850,13 @@ function renderLogin(error) {
   setField(null);
   app.innerHTML = `<div class="login"><form class="card" id="lf">
     <a class="brand" href="#/about"><span class="brand-dot"></span>brain</a>
-    <p class="fig"><span>FIG. 00 — ACCESS</span></p>
-    <h1 class="login-h">Open your <em>brain</em></h1>
-    <p class="sub">Paste your access token (from <code>data/token.txt</code> or your host’s <code>BRAIN_TOKEN</code>).</p>
-    ${error ? `<p class="err" role="alert">${esc(error)}</p>` : ''}
+    <h1 class="h-sm">Open your <em>brain</em></h1>
+    <p class="sub">Paste your access token. It’s in <code>data/token.txt</code>, or your host’s <code>BRAIN_TOKEN</code>.</p>
     <label class="sr" for="tok">Access token</label>
-    <input class="field" id="tok" name="t" type="password" placeholder="brn_…" autocomplete="current-password" required>
-    <div class="row"><button class="btn primary">Open my brain</button></div>
-    <p class="sub small"><a href="#/about">What is this?</a></p></form></div>`;
+    <input class="field" id="tok" name="t" type="password" placeholder="brn_…" autocomplete="current-password" required${error ? ' aria-describedby="tokerr"' : ''}>
+    ${error ? `<p class="err" id="tokerr" role="alert">${esc(error)} Check for a stray space, then paste it again.</p>` : ''}
+    <button class="btn primary">Open my brain</button>
+    <p class="small"><a href="#/about">What is this?</a></p></form></div>`;
   $('#tok').focus();
   $('#lf').onsubmit = (e) => {
     e.preventDefault();

@@ -1,14 +1,15 @@
 # Brain design system
 
-Brain is a **neural archive — readable first**. Warm paper/ink duality, one soft phosphor
-signal colour, an upright serif for display set against a highly legible sans for everything
-you read, hairline rules. A brain-shaped constellation of nodes and synapses is the landing
+Brain is a **neural archive — readable first**. Cool paper/ink duality, one signal colour,
+an upright serif for page titles and big numerals set against a highly legible sans for
+everything you read. The app is a quiet instrument: one card style, one reading column,
+nothing decorative between you and a memory. A brain-shaped constellation of nodes and synapses is the landing
 hero; a living field made of real memories sits behind home.
 **Plain, generic or "clean but forgettable" is a failed review.**
 
 ## Principles
-- **One primary action per screen.** Capture is always one tap away (FAB on phone, button on desktop).
-- **Anything in three taps.** Search is reachable from every screen with `/` or ⌘K.
+- **One primary action per screen.** Capture is always one tap away (centre tab on phone, sidebar button on desktop).
+- **Anything in three taps.** Search is reachable from every screen with `/` or ⌘K (desktop) and is the Home tab on phone.
 - **Design every state:** first-run, loading (skeletons shaped like the content, not spinners
   over it), empty *with a next action*, error *with recovery*, offline, success, disabled,
   long text, permission denied (push, mic).
@@ -38,7 +39,8 @@ twice belongs in the tokens. One semantic colour per meaning.
 | `--mark` | blue 20% | cyan 22% | search-hit highlight |
 | `--danger` | `#b3261e` | `#ff6b6b` | destructive, recording |
 | `--field-node` / `--field-line` | navy 60% / deep blue 32% | ice 62% / dim blue 30% | neural field canvas; lines are the secondary, dimmer blue |
-| `--tick` / `--hud-grid` | blue 45% / 6% | cyan 50% / 3.5% | HUD: corner ticks on cards, faint grid behind the hero brain only (never behind body text) |
+| `--tick` / `--hud-grid` | blue 45% / 6% | cyan 50% / 3.5% | landing and intro HUD only: intro corner ticks, faint grid behind the hero brain. Never in the app |
+| `--scrim` / `--shadow-pop` | ink 36% / soft ink drop | black 62% / deep drop | sheet backdrop / floating layers only (More sheet, Ask composer, toast) |
 | `--grain` / `--grain-opacity` | cool SVG noise / 0.035 | same / 0.025 | barely-there grain, below content (z-index 0) |
 | `--k-*` | per memory kind (cool-led: blue, violet, teal, mint, sky, lavender; rose/amber/gold for lesson/todo/highlight) | same | kind glyph + field node colour only |
 
@@ -49,12 +51,23 @@ hue deepens to `#0057a8` so it passes AA as text.
 
 - **Type (readability first):** `--sans` Inter for all body, labels, nav, buttons and meta,
   sentence case, 16px/1.6 in the app and 17px on the landing, prose capped at ~68ch.
-  `--serif` Instrument Serif **upright** for display (landing hero 44–76px, section heads
-  32–48px, page h1 36–56px, card titles 24px); italic only for a single accent word (`<em>`).
+  `--serif` Instrument Serif **upright** for display only (landing hero 44–76px, landing section
+  heads 32–48px, app page h1 32–44px, stat numerals 34px); italic only for a single accent word
+  (`<em>`). Card titles, inputs, section heads and anything you scan in a list are sans
+  (card title 600 16px, section head 600 15px).
   `--mono` JetBrains Mono only for ids, URLs, code and kbd. No uppercase tracked mono labels.
 - **Kinds** are a glyph (◆ decision, ▲ lesson, ● preference, □ todo, ◇ session…) in the
   kind pigment, never a pill. Map lives in `web/lib.js`.
-- **Radius:** `--radius` 3px (index cards, controls). Circles only for nodes, mic and FAB.
+- **Radius:** `--radius` 10px (cards, fields, buttons), `--radius-sm` 6px (small buttons, nav rows,
+  code), `--radius-lg` 16px (sheet, Ask composer). Full pills only for filter chips and landing CTAs;
+  circles only for nodes and the mic.
+- **Shell:** desktop is a 232px sidebar (Capture button, then icon + label nav) and one centred
+  reading column, max 800px, for every view. Phone (≤860px) is a tab bar — Home, Ask, Capture
+  (centre, accent), Projects, More — and More opens a bottom sheet (`<dialog>`) with every other
+  screen. Nothing floats over content: no FAB.
+- **Cards:** one style — `--surface`, 1px `--line`, `--radius`. No corner ticks, side stripes or
+  nested cards. A list card is: meta row (kind glyph, project, age; one line, project truncates),
+  title, two-line excerpt.
 - **Spacing:** 4px grid — 4, 8, 12, 16, 24, 32, 48. Page gutter 16px on phone.
 - **Neural field (app home):** ≤110 nodes desktop / 48 phone, DPR capped at 2 / 1.5, paused when the
   tab is hidden, one still frame under reduced motion. App routes ignite it in ≤1.6s, once per session, skippable.
